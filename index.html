@@ -1328,7 +1328,8 @@
   }
 
   // ── Dynamic daily budget (earn-from-movement model) + adaptive calibration ──
-  const STEP_KCAL = 0.0005; // kcal per step per kg (~400 kcal / 10k steps @ 80kg)
+  const STEP_KCAL = 0.0005; // gross kcal per step per kg
+  const STEP_BASELINE = 4000; // incidental steps already included in the sedentary base
   const MET = { strength:5, cardio:7, run:9.8, hiit:8.5, walk:3.5, cycle:7, swim:7, yoga:3, other:5 };
   const WORKOUT_TYPES = [
     { v:'strength', label:'כוח / משקולות' }, { v:'cardio', label:'אירובי' },
@@ -1340,9 +1341,11 @@
   function metForType(t) { return MET[t] || MET.other; }
   function workoutBurn(w) { const min = +w.duration||0; if (!min) return 0; return Math.round(metForType(w.type) * curWeight() * (min/60)); }
   function dayWorkoutBurn(date) { return workouts().filter(w=>w.date===date).reduce((s,w)=> s + workoutBurn(w), 0); }
-  function stepsBurn(date) { return Math.round(getSteps(date) * curWeight() * STEP_KCAL); }
+  function eatBackFactor() { const g = getGoals(); return (g.plan && g.plan.eatBack != null) ? g.plan.eatBack : 0.5; }
+  function stepsBurn(date) { const extra = Math.max(0, getSteps(date) - STEP_BASELINE); return Math.round(extra * curWeight() * STEP_KCAL * eatBackFactor()); }
   function genderFloor() { const g = getGoals(); return (g.plan && g.plan.gender==='female') ? 1200 : 1500; }
   function liveBmr() { const g = getGoals(); if (!g.plan) return 0; return calcBMR(g.plan.gender, curWeight(), g.plan.height, g.plan.age); }
+  function setEatBack(v) { const g = getGoals(); if (!g.plan) return; g.plan.eatBack = v; saveGoals(g); refreshAll(); openPlanModal(); }
   // Returns the dynamic budget breakdown for a day, or null if no plan (caller falls back to static goals)
   function dailyBudget(date) {
     const g = getGoals(); if (!g.plan || !g.plan.bmr) return null;
@@ -1507,7 +1510,7 @@
     g.weight = +_ob.goalWeight; g.onboarded = true;
     g.plan = { gender:_ob.gender, age:+_ob.age, height:+_ob.height, activity:+_ob.activity,
       startWeight:+_ob.startWeight, startDate:todayStr(), goalWeight:+_ob.goalWeight,
-      pace:plan.pace, direction:plan.direction, tdee:plan.tdee, bmr:plan.bmr, calib:1, goalDate:plan.goalDateISO, createdAt:Date.now() };
+      pace:plan.pace, direction:plan.direction, tdee:plan.tdee, bmr:plan.bmr, calib:1, eatBack:0.5, goalDate:plan.goalDateISO, createdAt:Date.now() };
     saveGoals(g);
     const ms = metrics(); if (!ms.find(x=>x.date===todayStr())) { ms.push({ id:genId(), date:todayStr(), weight:+_ob.startWeight }); save(pk('metrics'), ms); }
     closeModal('onboard'); toast('🎯 התוכנית נשמרה'); refreshAll();
@@ -1542,6 +1545,7 @@
     const bi = bmiInfo(cur, pl.height), biGoal = bmiInfo(pl.goalWeight, pl.height);
     const b = dailyBudget(todayStr()) || { core:g.cal, maintenance:g.cal, deficit:0 };
     const bmrNow = liveBmr() || pl.bmr;
+    const eb = (pl.eatBack != null) ? pl.eatBack : 0.5;
     const spark = sparkline(plan.proj.map(x=>x.weight));
     let rows = '';
     const stepEvery = Math.max(1, Math.ceil(plan.proj.length/10));
@@ -1567,6 +1571,16 @@
       ${plan.direction!=='maintain' ? `<div class="card-title" style="margin-bottom:8px">תחזית משקל ${pl.direction==='lose'?'📉':'📈'}</div>
       <div style="margin-bottom:10px">${spark}</div>
       <div class="ob-result">${rows}</div>` : ''}
+
+      <div class="card-title" style="margin-bottom:8px">צעדים וקלוריות 🚶</div>
+      <div class="ob-result">
+        <div class="muted" style="line-height:1.7;margin-bottom:10px">כמה מהקלוריות שאתה שורף בצעדים יתווספו למה שמותר לאכול. פחות = ירידה מהירה יותר. (נספרים רק צעדים מעל ${nf(STEP_BASELINE)})</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn ${eb===0?'btn-primary':'btn-ghost'}" style="flex:1" onclick="setEatBack(0)">ללא</button>
+          <button class="btn ${eb===0.5?'btn-primary':'btn-ghost'}" style="flex:1" onclick="setEatBack(0.5)">חצי</button>
+          <button class="btn ${eb===1?'btn-primary':'btn-ghost'}" style="flex:1" onclick="setEatBack(1)">מלא</button>
+        </div>
+      </div>
 
       <div class="card-title" style="margin-bottom:8px">כיול לפי תוצאות 🔧</div>
       <div class="ob-result"><div class="muted" style="line-height:1.7">${calibStatusText()}</div></div>
