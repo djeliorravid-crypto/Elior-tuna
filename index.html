@@ -199,6 +199,34 @@
     .install-banner .ib-txt { flex:1; }
     .install-banner .ib-t { font-weight:800; font-size:14px; }
     .install-banner .ib-s { font-size:12px; color:var(--text-muted); }
+
+    /* ===== POLISH ===== */
+    @property --p { syntax:'<number>'; inherits:false; initial-value:0; }
+    @keyframes ringGrow { from { --p:0; } }
+    @keyframes barGrow  { from { width:0; } }
+    @keyframes floaty   { 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-7px); } }
+    @keyframes popIn    { from { opacity:0; transform:translateY(14px) scale(.97); } to { opacity:1; transform:none; } }
+    @keyframes pulse    { 50% { opacity:.35; } }
+    .ring { animation: ringGrow .9s cubic-bezier(.22,1,.36,1); }
+    .bar > i { animation: barGrow .7s cubic-bezier(.22,1,.36,1); }
+
+    /* login + lobby */
+    #login-screen, #lobby-screen { background: radial-gradient(125% 85% at 50% -15%, var(--accent-soft), transparent 60%), var(--bg); }
+    .login-logo { animation: floaty 3.4s ease-in-out infinite; }
+    .login-box { background:var(--surface); border:1px solid var(--border); border-radius:26px; padding:32px 24px; box-shadow:var(--shadow-lg); animation: popIn .4s ease; }
+    .lobby-card { animation: popIn .5s cubic-bezier(.22,1,.36,1) backwards; }
+    .lobby-card:nth-child(2) { animation-delay:.09s; }
+    .lobby-card:nth-child(3) { animation-delay:.18s; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration:.001s !important; } }
+
+    /* empty states */
+    .empty .empty-ic { font-size:48px; display:block; margin-bottom:12px; }
+
+    /* cloud sync pill */
+    .syncpill { position:fixed; top:calc(10px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%) translateY(-90px); background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow-lg); border-radius:99px; padding:8px 16px; font-size:13px; font-weight:800; color:var(--text); z-index:250; transition:transform .4s cubic-bezier(.22,1,.36,1); display:flex; align-items:center; gap:8px; }
+    .syncpill.show { transform:translateX(-50%) translateY(0); }
+    .syncpill .dot { width:9px; height:9px; border-radius:50%; background:var(--green); flex:0 0 auto; }
+    .syncpill.connecting .dot { background:var(--carb); animation: pulse 1s infinite; }
   </style>
 </head>
 <body>
@@ -338,6 +366,9 @@
   <!-- ===== TOAST ===== -->
   <div id="toast" class="toast"></div>
 
+  <!-- ===== CLOUD SYNC PILL ===== -->
+  <div id="syncpill" class="syncpill"></div>
+
   <script>
   /* ============================================================
      CONFIG
@@ -432,6 +463,7 @@
   function initFirebase() {
     _loadPending();
     if (!CLOUD_CONFIGURED) { console.warn('Firebase not configured — local-only mode'); return Promise.resolve(); }
+    showSync('connecting');
     try {
       firebase.initializeApp(firebaseConfig);
       return firebase.auth().signInAnonymously()
@@ -469,10 +501,11 @@
           }
         });
         firebaseReady = true;
+        showSync('ok');
         setTimeout(autoBackup, 3000);
         console.log('Firebase ✓');
-      }).catch(err => console.warn('Firebase load failed — local data:', err.message));
-    } catch(e) { console.warn('Firebase init failed:', e.message); return Promise.resolve(); }
+      }).catch(err => { hideSync(); console.warn('Firebase load failed — local data:', err.message); });
+    } catch(e) { hideSync(); console.warn('Firebase init failed:', e.message); return Promise.resolve(); }
   }
 
   function _syncFromCloud(reason) {
@@ -524,12 +557,15 @@
   const el = id => document.getElementById(id);
   const genId = () => 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
   const r0 = n => Math.round(n || 0);
+  const nf = n => Math.round(n || 0).toLocaleString('he-IL');
   function todayStr() { const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function parseD(s) { return new Date(s + 'T00:00:00'); }
   function dateLabel(s) { const d=parseD(s); const t=todayStr(); if(s===t) return 'היום'; const y=new Date(); y.setDate(y.getDate()-1); const ys=y.getFullYear()+'-'+String(y.getMonth()+1).padStart(2,'0')+'-'+String(y.getDate()).padStart(2,'0'); if(s===ys) return 'אתמול'; return d.toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long'}); }
   function shortDate(s) { return parseD(s).toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit'}); }
   function greeting() { const h=new Date().getHours(); if(h<12) return 'בוקר טוב'; if(h<17) return 'צהריים טובים'; if(h<21) return 'ערב טוב'; return 'לילה טוב'; }
   function toast(msg) { const t=el('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2400); }
+  function showSync(state) { const p=el('syncpill'); if(!p) return; p.className='syncpill show'+(state==='connecting'?' connecting':''); p.innerHTML='<span class="dot"></span>'+(state==='connecting'?'מתחבר לענן…':'מחובר לענן'); if(state!=='connecting'){ clearTimeout(p._t); p._t=setTimeout(()=>p.classList.remove('show'),2800); } }
+  function hideSync() { const p=el('syncpill'); if(p) p.classList.remove('show'); }
   function pk(t) { return currentPerson + '_' + t; }
   function esc(s) { return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -644,9 +680,9 @@
       <div class="card">
         <div class="card-title">קלוריות היום</div>
         <div class="ring-wrap">
-          <div class="ring" style="--p:${calPct}"><div class="ring-in"><div class="ring-num">${r0(t.cal)}</div><div class="ring-lbl">מתוך ${r0(g.cal)}</div></div></div>
+          <div class="ring" style="--p:${calPct}"><div class="ring-in"><div class="ring-num">${nf(t.cal)}</div><div class="ring-lbl">מתוך ${nf(g.cal)}</div></div></div>
           <div class="ring-side">
-            <div class="big" style="color:var(--accent)">${remaining}</div>
+            <div class="big" style="color:var(--accent)">${nf(remaining)}</div>
             <div class="lbl">קלוריות נותרו</div>
           </div>
         </div>
@@ -662,8 +698,8 @@
         <div class="water-row">
           <button class="round-btn" onclick="changeWater(-1)">−</button>
           <div style="text-align:center">
-            <div class="water-glasses">${'🥛'.repeat(Math.min(water,12)) || '—'}</div>
-            <div class="muted" style="margin-top:4px">${water} / ${g.water} כוסות</div>
+            <div class="water-glasses" id="water-glasses">${'🥛'.repeat(Math.min(water,12)) || '—'}</div>
+            <div class="muted" id="water-count" style="margin-top:4px">${water} / ${g.water} כוסות</div>
           </div>
           <button class="round-btn" onclick="changeWater(1)">+</button>
         </div>
@@ -695,7 +731,13 @@
     return `<div class="macro"><div class="macro-top"><span>${label}</span><span>${r0(val)} / ${r0(goal)} ג'</span></div>
       <div class="bar"><i style="width:${pct}%;background:${color}"></i></div></div>`;
   }
-  function changeWater(d) { setWater(todayStr(), Math.max(0, getWater(todayStr())+d)); refreshAll(); }
+  function changeWater(d) {
+    const n = Math.max(0, getWater(todayStr())+d);
+    setWater(todayStr(), n);
+    const gl = el('water-glasses'), ct = el('water-count');
+    if (currentPage==='dashboard' && gl && ct) { gl.textContent = '🥛'.repeat(Math.min(n,12)) || '—'; ct.textContent = n + ' / ' + getGoals().water + ' כוסות'; }
+    else refreshAll();
+  }
 
   /* ============================================================
      RENDER — NUTRITION
@@ -717,7 +759,7 @@
           <div class="item-val">${r0(m.cal)}</div></div>`;
       });
     });
-    if (!dayMeals.length) listHtml = `<div class="empty">עדיין לא נרשמו ארוחות ביום הזה.<br>לחץ + כדי להוסיף 🍎</div>`;
+    if (!dayMeals.length) listHtml = `<div class="empty"><span class="empty-ic">🍎</span>עדיין לא נרשמו ארוחות ביום הזה<br>לחץ + כדי להוסיף</div>`;
 
     el('page-nutrition').innerHTML = `
       <div class="phead"><div><h2>תזונה</h2><p>מעקב ארוחות וקלוריות</p></div>
@@ -728,7 +770,7 @@
         <button onclick="changeNutDate(1)">‹</button>
       </div>
       <div class="card">
-        <div class="card-title">סיכום יומי<span class="muted">${r0(t.cal)} / ${r0(g.cal)} קל'</span></div>
+        <div class="card-title">סיכום יומי<span class="muted">${nf(t.cal)} / ${nf(g.cal)} קל'</span></div>
         ${macroBar('חלבון', t.protein, g.protein, 'var(--accent)')}
         ${macroBar('פחמימות', t.carbs, g.carbs, 'var(--carb)')}
         ${macroBar('שומן', t.fat, g.fat, 'var(--fat)')}
@@ -745,7 +787,7 @@
     const wkWeek = all.filter(w => inThisWeek(w.date)).length;
     const pct = g.workoutsPerWeek ? Math.min(100, wkWeek/g.workoutsPerWeek*100) : 0;
     let list = '';
-    if (!all.length) list = `<div class="empty">עדיין אין אימונים.<br>לחץ + כדי לתעד אימון 🏋️</div>`;
+    if (!all.length) list = `<div class="empty"><span class="empty-ic">🏋️</span>עדיין אין אימונים<br>לחץ + כדי לתעד אימון</div>`;
     else all.forEach(w => {
       const vol = (w.exercises||[]).reduce((s,e)=> s + (+e.sets||0)*(+e.reps||0)*(+e.weight||0), 0);
       const chips = (w.exercises||[]).map(e => `<span class="chip">${esc(e.name)} ${e.sets||0}×${e.reps||0}${e.weight?(' · '+e.weight+'ק"ג'):''}</span>`).join('');
@@ -780,7 +822,7 @@
     const spark = sparkline(ms.slice(-14).map(m=>m.weight));
     let list = '';
     const desc = ms.slice().reverse();
-    if (!desc.length) list = `<div class="empty">עדיין אין שקילות.<br>לחץ + כדי להוסיף ⚖️</div>`;
+    if (!desc.length) list = `<div class="empty"><span class="empty-ic">⚖️</span>עדיין אין שקילות<br>לחץ + כדי להוסיף שקילה</div>`;
     else desc.forEach((m,i) => {
       const prev = desc[i+1];
       const ch = prev ? (m.weight - prev.weight) : null;
@@ -1075,6 +1117,8 @@
   if (localStorage.getItem('fit_authed')==='1') showLobby(); else el('login-screen').classList.remove('hidden');
 
   initFirebase().then(() => { refreshAll(); el('ver-side').textContent = localStorage.getItem('app_version')||'1'; });
+
+  document.addEventListener('click', e => { if (navigator.vibrate && e.target.closest('.btn,.round-btn,.fab,.nav-link,.bn-item,.lobby-card,.item,.modal-x')) { try { navigator.vibrate(8); } catch(_){} } }, true);
 
   document.addEventListener('visibilitychange', () => { if (document.visibilityState==='visible') _syncFromCloud('חזרה'); });
   setInterval(() => { if (document.visibilityState==='visible') _syncFromCloud('תקופתי'); }, 3*60*1000);
