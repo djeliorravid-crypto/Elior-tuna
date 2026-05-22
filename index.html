@@ -254,7 +254,8 @@
     /* ===== PLAN CARD ===== */
     .plan-card { background:linear-gradient(140deg,var(--accent),var(--accent2)); color:#fff; border-radius:var(--radius); padding:18px; margin-bottom:14px; box-shadow:var(--shadow-lg); cursor:pointer; transition:transform .1s; }
     .plan-card:active { transform:scale(.99); }
-    .plan-card .pc-h { font-size:14px; font-weight:800; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .plan-card .pc-h { font-size:15px; font-weight:800; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .plan-card .pc-sub { font-size:12.5px; opacity:.92; margin-top:6px; }
     .plan-mile { display:flex; gap:8px; margin-top:14px; }
     .plan-mile .pm { flex:1; background:rgba(255,255,255,.17); border-radius:13px; padding:11px 4px; text-align:center; }
     .plan-mile .pm-w { font-size:18px; font-weight:900; }
@@ -271,6 +272,16 @@
     .photo-grid .pg { position:relative; aspect-ratio:1; border-radius:12px; overflow:hidden; cursor:pointer; background:var(--surface3); }
     .photo-grid .pg img { width:100%; height:100%; object-fit:cover; display:block; }
     .photo-grid .pg .pd { position:absolute; bottom:0; left:0; right:0; background:linear-gradient(transparent,rgba(0,0,0,.65)); color:#fff; font-size:10px; font-weight:700; padding:10px 4px 4px; text-align:center; }
+
+    /* ===== QUICK-LOG ROW + CALORIE BREAKDOWN ===== */
+    .qrow { display:flex; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid var(--border); }
+    .qrow:last-child { border-bottom:none; }
+    .qrow .qlabel { font-weight:700; font-size:14.5px; flex:0 0 auto; }
+    .qrow .qval { flex:1; color:var(--text-muted); font-size:13px; font-weight:700; }
+    .qrow .qbtns { display:flex; align-items:center; gap:7px; flex:0 0 auto; }
+    .cal-break { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:14px; padding:9px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:12px; font-size:12.5px; font-weight:700; color:var(--text-muted); cursor:pointer; }
+    .cal-break .cb-add { color:var(--green); }
+    .cal-break .cb-q { margin-inline-start:auto; width:20px; height:20px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:900; }
   </style>
 </head>
 <body>
@@ -354,6 +365,18 @@
       <div class="modal-head"><h3 id="wk-title">אימון חדש</h3><button class="modal-x" onclick="closeModal('workout')">✕</button></div>
       <label>שם האימון</label>
       <input id="wk-name" class="inp" placeholder="לדוגמה: חזה + טריצפס" />
+      <label>סוג אימון</label>
+      <select id="wk-type" class="inp">
+        <option value="strength">כוח / משקולות</option>
+        <option value="cardio">אירובי</option>
+        <option value="run">ריצה</option>
+        <option value="hiit">HIIT</option>
+        <option value="walk">הליכה</option>
+        <option value="cycle">אופניים</option>
+        <option value="swim">שחייה</option>
+        <option value="yoga">יוגה / גמישות</option>
+        <option value="other">אחר</option>
+      </select>
       <div class="grid2">
         <div><label>תאריך</label><input id="wk-date" type="date" class="inp" /></div>
         <div><label>משך (דקות)</label><input id="wk-duration" type="number" inputmode="numeric" class="inp" placeholder="0" /></div>
@@ -480,7 +503,7 @@
   let nutritionDate = todayStr();
   let editingMealId = null, editingWk = null, editingMetric = null;
 
-  const DATA_TYPES = ['meals','workouts','metrics','water','photos'];
+  const DATA_TYPES = ['meals','workouts','metrics','water','photos','activity'];
   const ALL_KEYS = (() => {
     const k = [];
     Object.keys(PEOPLE).forEach(p => { DATA_TYPES.forEach(t => k.push(p+'_'+t)); k.push(p+'_goals'); });
@@ -650,6 +673,9 @@
   const waterArr = () => load(pk('water'));
   function getWater(date){ const w=waterArr().find(x=>x.date===date); return w?w.glasses:0; }
   function setWater(date,n){ const a=waterArr(); const i=a.findIndex(x=>x.date===date); if(i>=0){ if(n<=0)a.splice(i,1); else a[i].glasses=n; } else if(n>0){ a.push({date,glasses:n}); } save(pk('water'),a); }
+  const activityArr = () => load(pk('activity'));
+  function getSteps(date){ const w=activityArr().find(x=>x.date===date); return w?w.steps:0; }
+  function setSteps(date,n){ const a=activityArr(); const i=a.findIndex(x=>x.date===date); if(i>=0){ if(n<=0)a.splice(i,1); else a[i].steps=n; } else if(n>0){ a.push({date,steps:n}); } save(pk('activity'),a); }
   function dayTotals(date){ const t={cal:0,protein:0,carbs:0,fat:0}; meals().filter(m=>m.date===date).forEach(m=>{ t.cal+=+m.cal||0; t.protein+=+m.protein||0; t.carbs+=+m.carbs||0; t.fat+=+m.fat||0; }); return t; }
   function weekStart(){ const d=new Date(); d.setDate(d.getDate()-d.getDay()); d.setHours(0,0,0,0); return d; }
   function inThisWeek(s){ const d=parseD(s), ws=weekStart(), we=new Date(ws); we.setDate(we.getDate()+7); return d>=ws && d<we; }
@@ -704,6 +730,7 @@
     const _g = getGoals();
     const degenerate = _g.plan && _g.plan.direction!=='maintain' && !(_g.plan.pace>0);
     if (!_g.onboarded || degenerate) setTimeout(openOnboarding, 450);
+    else if (_g.plan && _g.plan.pace>0 && (!_g.plan.lastCalibAt || Date.now()-_g.plan.lastCalibAt > 86400000)) { if (recomputeCalib()) refreshAll(); }
   }
   function backToLobby() { currentPerson = null; showLobby(); }
 
@@ -740,22 +767,25 @@
      RENDER — DASHBOARD
      ============================================================ */
   function renderDashboard() {
-    const g = getGoals(), t = dayTotals(todayStr()), p = PEOPLE[currentPerson];
-    const calPct = g.cal ? Math.min(100, t.cal/g.cal*100) : 0;
-    const remaining = Math.max(0, g.cal - t.cal);
-    const water = getWater(todayStr());
-    const todayWk = workouts().filter(w => w.date === todayStr());
+    const p = PEOPLE[currentPerson], g = getGoals();
+    const today = todayStr();
+    const t = dayTotals(today);
+    const dg = dayGoals(today), b = dg.breakdown;
+    const target = dg.cal;
+    const calPct = target ? Math.min(100, t.cal/target*100) : 0;
+    const over = t.cal > target;
+    const remaining = Math.max(0, target - t.cal);
+    const water = getWater(today), steps = getSteps(today);
     const ms = metrics().slice().sort((a,b)=> a.date<b.date?-1:1);
-    const lastW = ms.length ? ms[ms.length-1].weight : null;
-    const prevW = ms.length>1 ? ms[ms.length-2].weight : null;
-    const wChange = (lastW!=null && prevW!=null) ? (lastW-prevW) : null;
-    const wkWeek = workouts().filter(w => inThisWeek(w.date)).length;
+    const weighedToday = ms.some(m => m.date === today);
+    const workoutToday = workouts().filter(w => w.date === today);
+    const workoutBurnToday = workoutToday.reduce((s,w)=> s + workoutBurn(w), 0);
 
-    const weighedToday = ms.some(m => m.date === todayStr());
-    const weighNudge = weighedToday ? '' : `<div class="nudge" onclick="openMetricModal()"><span class="ne">⚖️</span><div style="flex:1"><div class="nt">שקול את עצמך היום</div><div class="ns">שקילה יומית = מעקב מדויק יותר</div></div></div>`;
+    const breakdownHtml = b ? `<div class="cal-break" onclick="toast(calBreakText())"><span>בסיס ${nf(b.core)}</span>${b.eSteps?`<span class="cb-add">+${nf(b.eSteps)} צעדים</span>`:''}${b.eWork?`<span class="cb-add">+${nf(b.eWork)} אימון</span>`:''}<span class="cb-q">?</span></div>` : '';
+    const weighNudge = weighedToday ? '' : `<div class="nudge" onclick="openMetricModal()"><span class="ne">⚖️</span><div style="flex:1"><div class="nt">שקול את עצמך היום</div><div class="ns">שקילה יומית = כיול מדויק של התוכנית</div></div></div>`;
 
     el('page-dashboard').innerHTML = `
-      <div class="phead"><div><h2>${greeting()}, ${p.name} ${p.emoji}</h2><p>${dateLabel(todayStr())}</p></div></div>
+      <div class="phead"><div><h2>${greeting()}, ${p.name} ${p.emoji}</h2><p>${dateLabel(today)}</p></div></div>
 
       ${renderPlanCard()}
       ${weighNudge}
@@ -763,52 +793,49 @@
       <div class="card">
         <div class="card-title">קלוריות היום</div>
         <div class="ring-wrap">
-          <div class="ring" style="--p:${calPct}"><div class="ring-in"><div class="ring-num">${nf(t.cal)}</div><div class="ring-lbl">מתוך ${nf(g.cal)}</div></div></div>
+          <div class="ring" style="--p:${calPct}"><div class="ring-in"><div class="ring-num">${nf(t.cal)}</div><div class="ring-lbl">מתוך ${nf(target)}</div></div></div>
           <div class="ring-side">
-            <div class="big" style="color:var(--accent)">${nf(remaining)}</div>
-            <div class="lbl">קלוריות נותרו</div>
+            <div class="big" style="color:${over?'var(--red)':'var(--accent)'}">${over?'+'+nf(t.cal-target):nf(remaining)}</div>
+            <div class="lbl">${over?'מעל היעד':'קלוריות נותרו'}</div>
           </div>
         </div>
-        <div style="margin-top:18px">
-          ${macroBar('חלבון', t.protein, g.protein, 'var(--accent)')}
-          ${macroBar('פחמימות', t.carbs, g.carbs, 'var(--carb)')}
-          ${macroBar('שומן', t.fat, g.fat, 'var(--fat)')}
+        ${breakdownHtml}
+        <div style="margin-top:16px">
+          ${macroBar('חלבון', t.protein, dg.protein, 'var(--accent)')}
+          ${macroBar('פחמימות', t.carbs, dg.carbs, 'var(--carb)')}
+          ${macroBar('שומן', t.fat, dg.fat, 'var(--fat)')}
         </div>
       </div>
 
       <div class="card">
-        <div class="card-title">💧 מים</div>
-        <div class="water-row">
-          <button class="round-btn" onclick="changeWater(-1)">−</button>
-          <div style="text-align:center">
-            <div class="water-glasses" id="water-glasses">${'🥛'.repeat(Math.min(water,12)) || '—'}</div>
-            <div class="muted" id="water-count" style="margin-top:4px">${water} / ${g.water} כוסות</div>
+        <div class="card-title">היום</div>
+        <div class="qrow">
+          <div class="qlabel">👟 צעדים</div>
+          <div class="qval">${nf(steps)}${b&&b.eSteps?` · ${nf(b.eSteps)} קל'`:''}</div>
+          <div class="qbtns">
+            <button class="round-btn" onclick="changeSteps(-1000)">−</button>
+            <button class="round-btn" onclick="changeSteps(1000)">+</button>
+            <button class="btn btn-ghost btn-sm" onclick="setStepsPrompt()">✎</button>
           </div>
-          <button class="round-btn" onclick="changeWater(1)">+</button>
         </div>
-      </div>
-
-      <div class="stats">
-        <div class="stat" onclick="showPage('workouts')" style="cursor:pointer">
-          <div class="stat-num">${todayWk.length ? '✓' : '–'}</div>
-          <div class="stat-lbl">אימון היום</div>
+        <div class="qrow">
+          <div class="qlabel">💧 מים</div>
+          <div class="qval" id="water-count">${water} / ${g.water} כוסות</div>
+          <div class="qbtns">
+            <button class="round-btn" onclick="changeWater(-1)">−</button>
+            <button class="round-btn" onclick="changeWater(1)">+</button>
+          </div>
         </div>
-        <div class="stat" onclick="showPage('workouts')" style="cursor:pointer">
-          <div class="stat-num">${wkWeek}/${g.workoutsPerWeek}</div>
-          <div class="stat-lbl">אימונים השבוע</div>
+        <div class="qrow" onclick="showPage('workouts')" style="cursor:pointer">
+          <div class="qlabel">🏋️ אימון היום</div>
+          <div class="qval">${workoutToday.length ? workoutToday.length+' · '+nf(workoutBurnToday)+" קל'" : 'לא תועד'}</div>
+          <div class="qbtns"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openWorkoutModal()">+ אימון</button></div>
         </div>
-        <div class="stat" onclick="showPage('metrics')" style="cursor:pointer">
-          <div class="stat-num">${lastW!=null ? lastW : '–'}</div>
-          <div class="stat-lbl">משקל ${wChange!=null ? (wChange>0?'▲':wChange<0?'▼':'')+Math.abs(wChange).toFixed(1) : '(ק"ג)'}</div>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:10px;margin-top:6px">
-        <button class="btn btn-ghost" style="flex:1" onclick="openMealModal()">🍎 ארוחה</button>
-        <button class="btn btn-ghost" style="flex:1" onclick="openWorkoutModal()">🏋️ אימון</button>
-        <button class="btn btn-ghost" style="flex:1" onclick="openMetricModal()">⚖️ שקילה</button>
       </div>`;
   }
+  function changeSteps(d) { const n = Math.max(0, getSteps(todayStr())+d); setSteps(todayStr(), n); refreshAll(); }
+  function setStepsPrompt() { const cur = getSteps(todayStr()); const v = prompt('כמה צעדים היום?', cur||''); if (v===null) return; const n = parseInt(v,10); if (isNaN(n)||n<0) { toast('מספר לא תקין'); return; } setSteps(todayStr(), n); refreshAll(); }
+  function calBreakText() { const b = dailyBudget(todayStr()); if (!b) return ''; let s = 'בסיס '+nf(b.maintenance); if (b.deficit>0) s+=' − גירעון '+nf(b.deficit); else if (b.deficit<0) s+=' + עודף '+nf(-b.deficit); if (b.eSteps) s+=' + צעדים '+nf(b.eSteps); if (b.eWork) s+=' + אימון '+nf(b.eWork); return s+" = "+nf(b.target)+" קל'"; }
   function macroBar(label, val, goal, color) {
     const pct = goal ? Math.min(100, val/goal*100) : 0;
     return `<div class="macro"><div class="macro-top"><span>${label}</span><span>${r0(val)} / ${r0(goal)} ג'</span></div>
@@ -817,8 +844,8 @@
   function changeWater(d) {
     const n = Math.max(0, getWater(todayStr())+d);
     setWater(todayStr(), n);
-    const gl = el('water-glasses'), ct = el('water-count');
-    if (currentPage==='dashboard' && gl && ct) { gl.textContent = '🥛'.repeat(Math.min(n,12)) || '—'; ct.textContent = n + ' / ' + getGoals().water + ' כוסות'; }
+    const ct = el('water-count');
+    if (currentPage==='dashboard' && ct) { ct.textContent = n + ' / ' + getGoals().water + ' כוסות'; }
     else refreshAll();
   }
 
@@ -827,7 +854,7 @@
      ============================================================ */
   function changeNutDate(d) { const dt=parseD(nutritionDate); dt.setDate(dt.getDate()+d); nutritionDate = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); render('nutrition'); }
   function renderNutrition() {
-    const g = getGoals(), t = dayTotals(nutritionDate);
+    const g = getGoals(), t = dayTotals(nutritionDate), dg = dayGoals(nutritionDate);
     const dayMeals = meals().filter(m => m.date === nutritionDate);
     const TYPES = ['ארוחת בוקר','ארוחת צהריים','ארוחת ערב','נשנוש'];
     let listHtml = '';
@@ -853,10 +880,10 @@
         <button onclick="changeNutDate(1)">‹</button>
       </div>
       <div class="card">
-        <div class="card-title">סיכום יומי<span class="muted">${nf(t.cal)} / ${nf(g.cal)} קל'</span></div>
-        ${macroBar('חלבון', t.protein, g.protein, 'var(--accent)')}
-        ${macroBar('פחמימות', t.carbs, g.carbs, 'var(--carb)')}
-        ${macroBar('שומן', t.fat, g.fat, 'var(--fat)')}
+        <div class="card-title">סיכום יומי<span class="muted">${nf(t.cal)} / ${nf(dg.cal)} קל'</span></div>
+        ${macroBar('חלבון', t.protein, dg.protein, 'var(--accent)')}
+        ${macroBar('פחמימות', t.carbs, dg.carbs, 'var(--carb)')}
+        ${macroBar('שומן', t.fat, dg.fat, 'var(--fat)')}
       </div>
       <div class="card">${listHtml}</div>`;
   }
@@ -867,27 +894,31 @@
   function renderWorkouts() {
     const g = getGoals();
     const all = workouts().slice().sort((a,b)=> a.date<b.date?1:-1);
-    const wkWeek = all.filter(w => inThisWeek(w.date)).length;
+    const weekWk = all.filter(w => inThisWeek(w.date));
+    const wkWeek = weekWk.length;
+    const weekBurn = weekWk.reduce((s,w)=> s + workoutBurn(w), 0);
     const pct = g.workoutsPerWeek ? Math.min(100, wkWeek/g.workoutsPerWeek*100) : 0;
     let list = '';
     if (!all.length) list = `<div class="empty"><span class="empty-ic">🏋️</span>עדיין אין אימונים<br>לחץ + כדי לתעד אימון</div>`;
     else all.forEach(w => {
       const vol = (w.exercises||[]).reduce((s,e)=> s + (+e.sets||0)*(+e.reps||0)*(+e.weight||0), 0);
+      const burn = workoutBurn(w);
+      const tl = (WORKOUT_TYPES.find(o=>o.v===w.type)||{}).label || '';
       const chips = (w.exercises||[]).map(e => `<span class="chip">${esc(e.name)} ${e.sets||0}×${e.reps||0}${e.weight?(' · '+e.weight+'ק"ג'):''}</span>`).join('');
       list += `<div class="item" style="display:block" onclick="openWorkoutModal('${w.id}')">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <div class="item-title">${esc(w.name)}</div>
+          <div class="item-title">${esc(w.name)}${tl?` <span class="chip">${tl}</span>`:''}</div>
           <div class="muted">${shortDate(w.date)}</div>
         </div>
-        <div style="margin-top:6px">${chips || '<span class="muted">ללא תרגילים</span>'}</div>
-        <div class="item-sub" style="margin-top:7px">${(w.exercises||[]).length} תרגילים${w.duration?(' · '+w.duration+' דקות'):''}${vol?(' · נפח '+r0(vol)+' ק"ג'):''}</div>
+        ${chips?`<div style="margin-top:6px">${chips}</div>`:''}
+        <div class="item-sub" style="margin-top:7px">${w.duration?(w.duration+' דק׳'):''}${burn?(' · 🔥 '+nf(burn)+" קל'"):''}${vol?(' · נפח '+nf(vol)+' ק"ג'):''}${(w.exercises||[]).length?(' · '+(w.exercises||[]).length+' תרגילים'):''}</div>
       </div>`;
     });
     el('page-workouts').innerHTML = `
       <div class="phead"><div><h2>אימונים</h2><p>תיעוד והתקדמות</p></div>
         <button class="btn btn-primary btn-sm" onclick="openWorkoutModal()">+ אימון</button></div>
       <div class="card">
-        <div class="card-title">השבוע<span class="muted">${wkWeek} / ${g.workoutsPerWeek} אימונים</span></div>
+        <div class="card-title">השבוע<span class="muted">${wkWeek} / ${g.workoutsPerWeek} אימונים${weekBurn?` · 🔥 ${nf(weekBurn)} קל'`:''}</span></div>
         <div class="bar"><i style="width:${pct}%;background:var(--accent)"></i></div>
       </div>
       <div class="card">${list}</div>`;
@@ -914,13 +945,17 @@
         <div class="item-val" style="color:${ch>0?'var(--red)':ch<0?'var(--green)':'var(--text-muted)'}">${ch!=null?(ch>0?'+':'')+ch.toFixed(1):''}</div></div>`;
     });
 
-    // water last 7 days
-    let waterBars = '';
+    // water + steps, last 7 days
+    let waterBars = '', stepsBars = '';
+    let maxSteps = 1; for (let i=6;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); maxSteps=Math.max(maxSteps, getSteps(isoDate(d))); }
     for (let i=6; i>=0; i--) {
       const d = new Date(); d.setDate(d.getDate()-i);
-      const ds = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-      const n = getWater(ds), h = Math.min(100, g.water? n/g.water*100 : 0);
-      waterBars += `<div style="flex:1;text-align:center"><div style="height:60px;display:flex;align-items:flex-end;justify-content:center"><div style="width:60%;height:${h}%;min-height:3px;background:var(--accent);border-radius:5px"></div></div><div class="muted" style="font-size:10px;margin-top:4px">${d.toLocaleDateString('he-IL',{weekday:'short'})}</div></div>`;
+      const ds = isoDate(d);
+      const wn = getWater(ds), wh = Math.min(100, g.water? wn/g.water*100 : 0);
+      const sn = getSteps(ds), sh = Math.min(100, sn/maxSteps*100);
+      const dl = d.toLocaleDateString('he-IL',{weekday:'short'});
+      waterBars += `<div style="flex:1;text-align:center"><div style="height:60px;display:flex;align-items:flex-end;justify-content:center"><div style="width:60%;height:${wh}%;min-height:3px;background:var(--accent);border-radius:5px"></div></div><div class="muted" style="font-size:10px;margin-top:4px">${dl}</div></div>`;
+      stepsBars += `<div style="flex:1;text-align:center"><div style="height:60px;display:flex;align-items:flex-end;justify-content:center"><div style="width:60%;height:${sh}%;min-height:3px;background:var(--carb);border-radius:5px"></div></div><div class="muted" style="font-size:10px;margin-top:4px">${dl}</div></div>`;
     }
 
     // progress photos
@@ -950,6 +985,10 @@
         ${photoHtml}
       </div>
       <div class="card">
+        <div class="card-title">👟 צעדים — 7 ימים אחרונים</div>
+        <div style="display:flex;gap:6px;align-items:flex-end">${stepsBars}</div>
+      </div>
+      <div class="card">
         <div class="card-title">💧 מים — 7 ימים אחרונים</div>
         <div style="display:flex;gap:6px;align-items:flex-end">${waterBars}</div>
       </div>
@@ -977,6 +1016,7 @@
       <div class="card">
         <div class="card-title">🎯 יעדים יומיים</div>
         <button class="btn btn-ghost btn-block" style="margin-bottom:12px" onclick="openPlanOrBuild()">📋 התוכנית האישית שלי</button>
+        ${g.plan ? `<div class="muted" style="line-height:1.6;margin-bottom:12px">📌 יש לך תוכנית פעילה — הקלוריות והמאקרו מחושבים אוטומטית ודינמית לפי תנועה ותוצאות. הערכים כאן משמשים רק כשאין תוכנית.</div>` : ''}
         <div class="grid2">
           <div><label>קלוריות</label><input id="g-cal" type="number" class="inp" value="${g.cal}"></div>
           <div><label>חלבון (ג')</label><input id="g-protein" type="number" class="inp" value="${g.protein}"></div>
@@ -1071,6 +1111,7 @@
     const w = id ? workouts().find(x=>x.id===id) : null;
     el('wk-title').textContent = w?'עריכת אימון':'אימון חדש';
     el('wk-name').value = w?w.name:''; el('wk-date').value = w?w.date:todayStr();
+    el('wk-type').value = w?(w.type||'strength'):'strength';
     el('wk-duration').value = w?(w.duration||''):''; el('wk-notes').value = w?(w.notes||''):'';
     el('wk-exercises').innerHTML = '';
     if (w && w.exercises && w.exercises.length) w.exercises.forEach(addExerciseRow); else addExerciseRow();
@@ -1080,7 +1121,7 @@
   function saveWorkout() {
     const name = el('wk-name').value.trim();
     if (!name) { toast('צריך שם לאימון'); return; }
-    const obj = { id: editingWk||genId(), name, date: el('wk-date').value||todayStr(),
+    const obj = { id: editingWk||genId(), name, type: el('wk-type').value, date: el('wk-date').value||todayStr(),
       duration:+el('wk-duration').value||0, notes: el('wk-notes').value.trim(), exercises: collectExercises() };
     const arr = workouts(); const i = arr.findIndex(x=>x.id===obj.id);
     if (i>=0) arr[i]=obj; else arr.push(obj);
@@ -1173,14 +1214,15 @@
   }
   function buildPlan(p) {
     const bmr = calcBMR(p.gender, p.startWeight, p.height, p.age);
-    const tdee = Math.round(bmr * p.activity);
+    const tdee = Math.round(bmr * p.activity); // informational: estimated total burn at typical activity
+    const base = Math.round(bmr * 1.2);        // sedentary base — eating target before logged movement is added
     const diff = p.goalWeight - p.startWeight;
     const direction = Math.abs(diff) < 0.5 ? 'maintain' : (diff < 0 ? 'lose' : 'gain');
     const floor = p.gender==='female' ? 1200 : 1500;
     let cal, pace = p.pace || 0;
-    if (direction==='maintain') { cal = tdee; pace = 0; }
-    else if (direction==='lose') { cal = Math.round(tdee - pace*1100); if (cal < floor) { cal = floor; pace = Math.max(0, Math.round((tdee-floor)/1100*100)/100); } }
-    else { cal = Math.round(tdee + pace*1100); }
+    if (direction==='maintain') { cal = base; pace = 0; }
+    else if (direction==='lose') { cal = Math.round(base - pace*1100); if (cal < floor) { cal = floor; pace = Math.max(0, Math.round((base-floor)/1100*100)/100); } }
+    else { cal = Math.round(base + pace*1100); }
     const refW = direction==='gain' ? p.goalWeight : p.startWeight;
     const protein = Math.round(1.8 * refW);
     const fat = Math.round(cal*0.25/9);
@@ -1212,6 +1254,83 @@
       opts.push(Object.assign({ reqPace:pc }, plan));
     });
     return opts;
+  }
+
+  // ── Dynamic daily budget (earn-from-movement model) + adaptive calibration ──
+  const STEP_KCAL = 0.0005; // kcal per step per kg (~400 kcal / 10k steps @ 80kg)
+  const MET = { strength:5, cardio:7, run:9.8, hiit:8.5, walk:3.5, cycle:7, swim:7, yoga:3, other:5 };
+  const WORKOUT_TYPES = [
+    { v:'strength', label:'כוח / משקולות' }, { v:'cardio', label:'אירובי' },
+    { v:'run', label:'ריצה' }, { v:'hiit', label:'HIIT' }, { v:'walk', label:'הליכה' },
+    { v:'cycle', label:'אופניים' }, { v:'swim', label:'שחייה' }, { v:'yoga', label:'יוגה / גמישות' },
+    { v:'other', label:'אחר' },
+  ];
+  function curWeight() { const ms = metrics().slice().sort((a,b)=> a.date<b.date?-1:1); const g = getGoals(); return ms.length ? ms[ms.length-1].weight : (g.plan ? g.plan.startWeight : 75); }
+  function metForType(t) { return MET[t] || MET.other; }
+  function workoutBurn(w) { const min = +w.duration||0; if (!min) return 0; return Math.round(metForType(w.type) * curWeight() * (min/60)); }
+  function dayWorkoutBurn(date) { return workouts().filter(w=>w.date===date).reduce((s,w)=> s + workoutBurn(w), 0); }
+  function stepsBurn(date) { return Math.round(getSteps(date) * curWeight() * STEP_KCAL); }
+  function genderFloor() { const g = getGoals(); return (g.plan && g.plan.gender==='female') ? 1200 : 1500; }
+  function liveBmr() { const g = getGoals(); if (!g.plan) return 0; return calcBMR(g.plan.gender, curWeight(), g.plan.height, g.plan.age); }
+  // Returns the dynamic budget breakdown for a day, or null if no plan (caller falls back to static goals)
+  function dailyBudget(date) {
+    const g = getGoals(); if (!g.plan || !g.plan.bmr) return null;
+    const calib = g.plan.calib || 1;
+    const maintenance = Math.round(liveBmr() * 1.2 * calib);
+    const deficit = Math.round((g.plan.direction==='gain' ? -1 : 1) * (g.plan.pace||0) * 1100);
+    const core = Math.max(genderFloor(), maintenance - deficit);
+    const eSteps = stepsBurn(date), eWork = dayWorkoutBurn(date);
+    return { maintenance, deficit, core, eSteps, eWork, target: core + eSteps + eWork };
+  }
+  function dailyMacros(target) {
+    const g = getGoals();
+    const protein = g.plan ? Math.round(1.8 * (g.plan.direction==='gain' ? g.plan.goalWeight : curWeight())) : g.protein;
+    const fat = Math.round(target*0.25/9);
+    const carbs = Math.max(0, Math.round((target - protein*4 - fat*9)/4));
+    return { protein, carbs, fat };
+  }
+  // Effective goals for a given day: dynamic when a plan exists, else the static saved goals
+  function dayGoals(date) {
+    const g = getGoals(), b = dailyBudget(date);
+    if (!b) return { cal:g.cal, protein:g.protein, carbs:g.carbs, fat:g.fat, water:g.water, breakdown:null };
+    const m = dailyMacros(b.target);
+    return { cal:b.target, protein:m.protein, carbs:m.carbs, fat:m.fat, water:g.water, breakdown:b };
+  }
+
+  // ── Adaptive calibration: learn real maintenance from logged food + weigh-ins ──
+  function calibData() {
+    const today = parseD(todayStr()); const startMs = new Date(today); startMs.setDate(startMs.getDate()-14);
+    // logged-food days in window
+    const days = []; for (let i=0;i<14;i++){ const d=new Date(today); d.setDate(d.getDate()-i); const ds=isoDate(d); const t=dayTotals(ds); if (t.cal>0) days.push({ds,intake:t.cal,earned:stepsBurn(ds)+dayWorkoutBurn(ds)}); }
+    const ws = metrics().filter(m=> parseD(m.date) >= startMs).slice().sort((a,b)=> a.date<b.date?-1:1);
+    if (days.length < 7 || ws.length < 2) return { ok:false, loggedDays:days.length, weighs:ws.length };
+    const spanDays = (parseD(ws[ws.length-1].date) - parseD(ws[0].date)) / 86400000;
+    if (spanDays < 7) return { ok:false, loggedDays:days.length, weighs:ws.length };
+    const avgIntake = days.reduce((s,d)=>s+d.intake,0)/days.length;
+    const avgEarned = days.reduce((s,d)=>s+d.earned,0)/days.length;
+    const dKg = ws[ws.length-1].weight - ws[0].weight;
+    const observedMaint = avgIntake - avgEarned - (dKg*7700)/spanDays;
+    return { ok:true, avgIntake:Math.round(avgIntake), avgEarned:Math.round(avgEarned), dKg:Math.round(dKg*10)/10, spanDays:Math.round(spanDays), observedMaint:Math.round(observedMaint) };
+  }
+  function recomputeCalib(opts) {
+    const g = getGoals(); if (!g.plan || !g.plan.bmr) return false;
+    const d = calibData(); if (!d.ok) return false;
+    const restingMaint = (liveBmr() || g.plan.bmr) * 1.2;
+    let newCalib = d.observedMaint / restingMaint;
+    newCalib = Math.max(0.7, Math.min(1.3, newCalib));
+    const cur = g.plan.calib || 1;
+    g.plan.calib = Math.round((cur*0.5 + newCalib*0.5)*1000)/1000;
+    g.plan.lastCalibAt = Date.now();
+    saveGoals(g);
+    if (opts && opts.toast) toast('🔧 היעד כויל לפי התוצאות שלך');
+    return true;
+  }
+  function calibStatusText() {
+    const g = getGoals(); if (!g.plan) return '';
+    const d = calibData();
+    if (!d.ok) return `כדי לכייל את היעד לפי התוצאות שלך צריך לפחות 7 ימי תיעוד אכילה ו-2 שקילות בטווח שבוע. (כרגע: ${d.loggedDays} ימים, ${d.weighs} שקילות)`;
+    const dir = d.dKg<0 ? 'ירידה' : d.dKg>0 ? 'עלייה' : 'ללא שינוי';
+    return `ב-${d.spanDays} הימים האחרונים אכלת בממוצע ${nf(d.avgIntake)} קל'/יום, שרפת ~${nf(d.avgEarned)} בתנועה, ו${dir} של ${Math.abs(d.dKg)} ק"ג. מכאן חילוף החומרים האמיתי שלך ≈ ${nf(d.observedMaint)} קל' — היעד מתכוונן לפי זה.`;
   }
 
   // ── Onboarding wizard ──
@@ -1276,12 +1395,12 @@
       const dirTxt = plan.direction==='lose'?'ירידה':plan.direction==='gain'?'עלייה':'שמירה';
       body.innerHTML = `<div class="ob-step">
         <div class="ob-emoji">✨</div><div class="ob-title">התוכנית שלך מוכנה</div>
-        <div class="ob-result"><div class="ob-sub" style="margin:0 0 4px">יעד קלוריות יומי</div><div class="ob-bignum">${nf(plan.cal)}</div></div>
+        <div class="ob-result"><div class="ob-sub" style="margin:0 0 4px">יעד קלוריות בסיס ליום</div><div class="ob-bignum">${nf(plan.cal)}</div>
+          <div class="muted" style="text-align:center;margin-top:6px">+ קלוריות על כל צעד ואימון שתתעד 💪</div></div>
         <div class="ob-result">
           <div class="ob-stat-row"><span>חלבון · פחמימות · שומן</span><b>${plan.protein} · ${plan.carbs} · ${plan.fat} ג'</b></div>
           <div class="ob-stat-row"><span>מים ביום</span><b>${plan.water} כוסות</b></div>
           <div class="ob-stat-row"><span>BMI נוכחי</span><b style="color:${bi.color}">${bi.bmi} · ${bi.label}</b></div>
-          <div class="ob-stat-row"><span>חילוף חומרים (TDEE)</span><b>${nf(plan.tdee)} קל'</b></div>
           ${plan.direction!=='maintain' ? `<div class="ob-stat-row"><span>${dirTxt} של ${plan.totalKg} ק"ג</span><b>${plan.pace} ק"ג/שבוע</b></div>
           <div class="ob-stat-row"><span>תאריך יעד משוער</span><b>${fullDate(plan.goalDateISO)}</b></div>` : ''}
         </div>
@@ -1317,7 +1436,7 @@
     g.weight = +_ob.goalWeight; g.onboarded = true;
     g.plan = { gender:_ob.gender, age:+_ob.age, height:+_ob.height, activity:+_ob.activity,
       startWeight:+_ob.startWeight, startDate:todayStr(), goalWeight:+_ob.goalWeight,
-      pace:plan.pace, direction:plan.direction, tdee:plan.tdee, bmr:plan.bmr, goalDate:plan.goalDateISO, createdAt:Date.now() };
+      pace:plan.pace, direction:plan.direction, tdee:plan.tdee, bmr:plan.bmr, calib:1, goalDate:plan.goalDateISO, createdAt:Date.now() };
     saveGoals(g);
     const ms = metrics(); if (!ms.find(x=>x.date===todayStr())) { ms.push({ id:genId(), date:todayStr(), weight:+_ob.startWeight }); save(pk('metrics'), ms); }
     closeModal('onboard'); toast('🎯 התוכנית נשמרה'); refreshAll();
@@ -1330,16 +1449,17 @@
     const ms = metrics().slice().sort((a,b)=> a.date<b.date?-1:1);
     const cur = ms.length ? ms[ms.length-1].weight : pl.startWeight;
     const plan = buildPlan({ gender:pl.gender, age:pl.age, height:pl.height, startWeight:cur, activity:pl.activity, goalWeight:pl.goalWeight, pace:pl.pace });
-    const m = w => plan.proj[w] ? plan.proj[w].weight : (plan.proj.length?plan.proj[plan.proj.length-1].weight:cur);
     const dirEmoji = pl.direction==='lose' ? '📉' : '📈';
+    const elapsedW = Math.max(0, (parseD(todayStr()) - parseD(pl.startDate)) / 604800000);
+    const expected = pl.direction==='lose' ? pl.startWeight - pl.pace*elapsedW : pl.startWeight + pl.pace*elapsedW;
+    let status;
+    if (Math.abs(cur - pl.goalWeight) < 0.3) status = 'הגעת ליעד! 🎉';
+    else if (pl.direction==='lose') status = (cur <= expected + 0.4) ? 'במסלול ✓' : 'קצת מאחור';
+    else status = (cur >= expected - 0.4) ? 'במסלול ✓' : 'קצת מאחור';
+    const left = Math.max(0, Math.round(Math.abs(cur - pl.goalWeight)*10)/10);
     return `<div class="plan-card" onclick="openPlanModal()">
-      <div class="pc-h"><span>${dirEmoji} התוכנית שלך</span><span>${cur} → ${pl.goalWeight} ק"ג ›</span></div>
-      <div class="plan-mile">
-        <div class="pm"><div class="pm-w">${m(1)}</div><div class="pm-l">עוד שבוע</div></div>
-        <div class="pm"><div class="pm-w">${m(2)}</div><div class="pm-l">שבועיים</div></div>
-        <div class="pm"><div class="pm-w">${m(4)}</div><div class="pm-l">חודש</div></div>
-        <div class="pm"><div class="pm-w">${pl.goalWeight}</div><div class="pm-l">${shortDate(plan.goalDateISO)}</div></div>
-      </div></div>`;
+      <div class="pc-h"><span>${dirEmoji} ${cur} → ${pl.goalWeight} ק"ג</span><span>${status} ›</span></div>
+      <div class="pc-sub">יעד ${shortDate(plan.goalDateISO)} · נשארו ${left} ק"ג</div></div>`;
   }
   function openPlanOrBuild() { getGoals().plan ? openPlanModal() : openOnboarding(); }
   function openPlanModal() {
@@ -1349,6 +1469,8 @@
     const cur = ms.length ? ms[ms.length-1].weight : pl.startWeight;
     const plan = buildPlan({ gender:pl.gender, age:pl.age, height:pl.height, startWeight:cur, activity:pl.activity, goalWeight:pl.goalWeight, pace:pl.pace });
     const bi = bmiInfo(cur, pl.height), biGoal = bmiInfo(pl.goalWeight, pl.height);
+    const b = dailyBudget(todayStr()) || { core:g.cal, maintenance:g.cal, deficit:0 };
+    const bmrNow = liveBmr() || pl.bmr;
     const spark = sparkline(plan.proj.map(x=>x.weight));
     let rows = '';
     const stepEvery = Math.max(1, Math.ceil(plan.proj.length/10));
@@ -1357,19 +1479,34 @@
       const d = new Date(); d.setDate(d.getDate()+x.week*7);
       rows += `<div class="ob-stat-row"><span>${x.week===0?'היום':'עוד '+x.week+' שבועות'}</span><b>${x.weight} ק"ג</b><span class="muted">${shortDate(isoDate(d))}</span></div>`;
     });
+    const calibPct = Math.round(((pl.calib||1)-1)*100);
     el('plan-body').innerHTML = `
-      <div class="ob-result"><div class="ob-sub" style="margin:0 0 4px">יעד קלוריות יומי</div><div class="ob-bignum">${nf(g.cal)}</div>
-        <div class="muted" style="text-align:center;margin-top:4px">חלבון ${g.protein} · פחמ' ${g.carbs} · שומן ${g.fat} ג'</div></div>
+      <div class="ob-result"><div class="ob-sub" style="margin:0 0 4px">יעד קלוריות בסיס ליום</div><div class="ob-bignum">${nf(b.core)}</div>
+        <div class="muted" style="text-align:center;margin-top:4px">+ קלוריות על כל צעד ואימון שתתעד</div></div>
+
+      <div class="card-title" style="margin-bottom:8px">איך חישבנו 🧮</div>
+      <div class="ob-result">
+        <div class="ob-stat-row"><span>חילוף חומרים במנוחה (BMR)</span><b>${nf(bmrNow)} קל'</b></div>
+        <div class="ob-stat-row"><span>תחזוקה בסיסית (×1.2${pl.calib&&pl.calib!==1?` · כיול ${calibPct>0?'+':''}${calibPct}%`:''})</span><b>${nf(b.maintenance)} קל'</b></div>
+        <div class="ob-stat-row"><span>${pl.direction==='gain'?'עודף לעלייה':'גירעון לירידה'}</span><b>${pl.direction==='gain'?'+':'−'}${nf(Math.abs(b.deficit))} קל'</b></div>
+        <div class="ob-stat-row"><span>= יעד בסיס ליום</span><b>${nf(b.core)} קל'</b></div>
+      </div>
+      <div class="muted" style="line-height:1.7;margin-bottom:12px">המספר משקף יום ללא תנועה. כל צעד ואימון שתתעד מוסיפים קלוריות שמותר לאכול — ככה היעד תמיד אמיתי ולא מעניש אותך על פעילות.</div>
+
       ${plan.direction!=='maintain' ? `<div class="card-title" style="margin-bottom:8px">תחזית משקל ${pl.direction==='lose'?'📉':'📈'}</div>
       <div style="margin-bottom:10px">${spark}</div>
       <div class="ob-result">${rows}</div>` : ''}
-      <div class="ob-result">
+
+      <div class="card-title" style="margin-bottom:8px">כיול לפי תוצאות 🔧</div>
+      <div class="ob-result"><div class="muted" style="line-height:1.7">${calibStatusText()}</div></div>
+      <button class="btn btn-primary btn-block" onclick="if(recomputeCalib({toast:true})){openPlanModal();}else{toast('צריך עוד נתונים לכיול');}">🔧 כייל עכשיו לפי התוצאות</button>
+
+      <div class="ob-result" style="margin-top:12px">
         <div class="ob-stat-row"><span>BMI עכשיו</span><b style="color:${bi.color}">${bi.bmi} · ${bi.label}</b></div>
         <div class="ob-stat-row"><span>BMI ביעד</span><b style="color:${biGoal.color}">${biGoal.bmi} · ${biGoal.label}</b></div>
-        <div class="ob-stat-row"><span>חילוף חומרים (TDEE)</span><b>${nf(plan.tdee)} קל'</b></div>
         ${plan.direction!=='maintain' ? `<div class="ob-stat-row"><span>תאריך יעד</span><b>${fullDate(plan.goalDateISO)}</b></div>` : ''}
       </div>
-      <button class="btn btn-primary btn-block" onclick="recalcPlan()">🔄 עדכן לפי המשקל הנוכחי</button>
+      <button class="btn btn-ghost btn-block" onclick="recalcPlan()">🔄 עדכן יעד לפי המשקל הנוכחי</button>
       <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="closeModal('plan');openOnboarding()">✏️ בנה תוכנית מחדש</button>`;
     openModal('plan');
   }
