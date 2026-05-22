@@ -19,6 +19,9 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 
+  <!-- ===== Free browser AI (no key, no signup) ===== -->
+  <script src="https://js.puter.com/v2/"></script>
+
   <!-- ===== Fonts ===== -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -282,6 +285,14 @@
     .cal-break { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:14px; padding:9px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:12px; font-size:12.5px; font-weight:700; color:var(--text-muted); cursor:pointer; }
     .cal-break .cb-add { color:var(--green); }
     .cal-break .cb-q { margin-inline-start:auto; width:20px; height:20px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:900; }
+
+    /* ===== AI FOOD ASSISTANT ===== */
+    textarea.inp { min-height:62px; resize:vertical; line-height:1.5; }
+    .ai-result { margin-top:14px; animation:fade .25s; }
+    .ai-item { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
+    .ai-item:first-child { border-top:1px solid var(--border); }
+    .ai-item-main { flex:1; min-width:0; }
+    .ai-total { display:flex; justify-content:space-between; gap:8px; font-weight:800; padding:12px 0 2px; font-size:14px; }
   </style>
 </head>
 <body>
@@ -478,7 +489,6 @@
   const NAV = [
     { id:'dashboard', label:'בית',     ic:'🏠' },
     { id:'nutrition', label:'תזונה',   ic:'🍎' },
-    { id:'workouts',  label:'אימונים', ic:'🏋️' },
     { id:'metrics',   label:'מדדים',   ic:'📊' },
     { id:'settings',  label:'הגדרות',  ic:'⚙️' },
   ];
@@ -753,8 +763,7 @@
     render(name);
   }
   function fabAction() {
-    if (currentPage==='workouts') openWorkoutModal();
-    else if (currentPage==='metrics') openMetricModal();
+    if (currentPage==='metrics') openMetricModal();
     else openMealModal();
   }
   function refreshAll() { if (currentPerson && !el('app').classList.contains('hidden')) render(currentPage); }
@@ -778,8 +787,6 @@
     const water = getWater(today), steps = getSteps(today);
     const ms = metrics().slice().sort((a,b)=> a.date<b.date?-1:1);
     const weighedToday = ms.some(m => m.date === today);
-    const workoutToday = workouts().filter(w => w.date === today);
-    const workoutBurnToday = workoutToday.reduce((s,w)=> s + workoutBurn(w), 0);
 
     const breakdownHtml = b ? `<div class="cal-break" onclick="toast(calBreakText())"><span>בסיס ${nf(b.core)}</span>${b.eSteps?`<span class="cb-add">+${nf(b.eSteps)} צעדים</span>`:''}${b.eWork?`<span class="cb-add">+${nf(b.eWork)} אימון</span>`:''}<span class="cb-q">?</span></div>` : '';
     const weighNudge = weighedToday ? '' : `<div class="nudge" onclick="openMetricModal()"><span class="ne">⚖️</span><div style="flex:1"><div class="nt">שקול את עצמך היום</div><div class="ns">שקילה יומית = כיול מדויק של התוכנית</div></div></div>`;
@@ -825,11 +832,6 @@
             <button class="round-btn" onclick="changeWater(-1)">−</button>
             <button class="round-btn" onclick="changeWater(1)">+</button>
           </div>
-        </div>
-        <div class="qrow" onclick="showPage('workouts')" style="cursor:pointer">
-          <div class="qlabel">🏋️ אימון היום</div>
-          <div class="qval">${workoutToday.length ? workoutToday.length+' · '+nf(workoutBurnToday)+" קל'" : 'לא תועד'}</div>
-          <div class="qbtns"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openWorkoutModal()">+ אימון</button></div>
         </div>
       </div>`;
   }
@@ -880,12 +882,81 @@
         <button onclick="changeNutDate(1)">‹</button>
       </div>
       <div class="card">
+        <div class="card-title">🤖 עוזר תזונה חכם</div>
+        <textarea id="ai-food-input" class="inp" rows="2" placeholder="כתוב מה אכלת… למשל: 200 גרם חזה עוף, צלחת אורז וביצה קשה"></textarea>
+        <button class="btn btn-primary btn-block" id="ai-food-btn" onclick="aiAnalyzeFood()">חשב ערכים עם AI ✨</button>
+        <div id="ai-food-result"></div>
+      </div>
+      <div class="card">
         <div class="card-title">סיכום יומי<span class="muted">${nf(t.cal)} / ${nf(dg.cal)} קל'</span></div>
         ${macroBar('חלבון', t.protein, dg.protein, 'var(--accent)')}
         ${macroBar('פחמימות', t.carbs, dg.carbs, 'var(--carb)')}
         ${macroBar('שומן', t.fat, dg.fat, 'var(--fat)')}
       </div>
       <div class="card">${listHtml}</div>`;
+  }
+
+  /* ============================================================
+     AI FOOD ASSISTANT (free, via puter.js — no key)
+     ============================================================ */
+  let _aiFood = null;
+  function aiPuterText(resp) {
+    if (resp == null) return '';
+    if (typeof resp === 'string') return resp;
+    if (resp.message) { const c = resp.message.content; if (typeof c === 'string') return c; if (Array.isArray(c)) return c.map(x => x.text || x).join(''); }
+    if (resp.text) return resp.text;
+    if (resp.content) return typeof resp.content === 'string' ? resp.content : JSON.stringify(resp.content);
+    return String(resp);
+  }
+  function extractJson(s) {
+    if (!s) return null;
+    let str = String(s).replace(/```json/gi,'').replace(/```/g,'').trim();
+    const a = str.indexOf('{'), b = str.lastIndexOf('}');
+    if (a<0 || b<0) return null;
+    try { return JSON.parse(str.slice(a, b+1)); } catch(e) { return null; }
+  }
+  async function aiAnalyzeFood() {
+    const inp = el('ai-food-input'); if (!inp) return;
+    const text = inp.value.trim();
+    if (!text) { toast('כתוב מה אכלת'); return; }
+    const btn = el('ai-food-btn'), res = el('ai-food-result');
+    if (typeof puter === 'undefined' || !puter.ai || !puter.ai.chat) { res.innerHTML = `<div class="muted" style="text-align:center;padding:10px">ה-AI לא נטען (אולי אין חיבור). <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openMealModal()">הוספה ידנית</button></div>`; return; }
+    const old = btn.textContent; btn.disabled = true; btn.textContent = 'מחשב… ⏳';
+    res.innerHTML = '<div class="muted" style="text-align:center;padding:14px">העוזר מחשב את הערכים… 🤔</div>';
+    const prompt = `אתה מומחה תזונה. נתח את תיאור הארוחה והערך ערכים תזונתיים לפי הכמויות. החזר אך ורק JSON תקין, בלי טקסט נוסף ובלי markdown, במבנה המדויק:
+{"items":[{"name":"שם בעברית","amount":"כמות","cal":מספר,"protein":מספר,"carbs":מספר,"fat":מספר}],"meal":"ארוחת בוקר|ארוחת צהריים|ארוחת ערב|נשנוש"}
+כל הערכים המספריים שלמים (קלוריות וגרמים). אם לא צוינה כמות הנח מנה סבירה. תיאור: """${text}"""`;
+    try {
+      const resp = await puter.ai.chat(prompt);
+      const data = extractJson(aiPuterText(resp));
+      if (!data || !Array.isArray(data.items) || !data.items.length) throw new Error('parse');
+      _aiFood = data; renderAiResult(data);
+    } catch(e) {
+      res.innerHTML = `<div class="muted" style="text-align:center;padding:10px">לא הצלחתי לחשב 😕 נסה לנסח אחרת או <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openMealModal()">הוסף ידנית</button></div>`;
+    } finally { btn.disabled = false; btn.textContent = old; }
+  }
+  function renderAiResult(data) {
+    const res = el('ai-food-result'); if (!res) return;
+    const tot = data.items.reduce((s,it)=>({ cal:s.cal+(+it.cal||0), protein:s.protein+(+it.protein||0), carbs:s.carbs+(+it.carbs||0), fat:s.fat+(+it.fat||0) }), {cal:0,protein:0,carbs:0,fat:0});
+    const types = ['ארוחת בוקר','ארוחת צהריים','ארוחת ערב','נשנוש'];
+    const rows = data.items.map(it => `<div class="ai-item"><div class="ai-item-main"><div class="item-title">${esc(it.name)}</div><div class="item-sub">${esc(it.amount||'')} · ${r0(it.protein)}ח' ${r0(it.carbs)}פ' ${r0(it.fat)}ש'</div></div><div class="item-val">${nf(it.cal)}</div></div>`).join('');
+    res.innerHTML = `<div class="ai-result">
+      ${rows}
+      <div class="ai-total"><span>סה"כ</span><span>${nf(tot.cal)} קל' · ${r0(tot.protein)}ח' ${r0(tot.carbs)}פ' ${r0(tot.fat)}ש'</span></div>
+      <select id="ai-meal-type" class="inp" style="margin:10px 0 0">${types.map(t=>`<option ${data.meal===t?'selected':''}>${t}</option>`).join('')}</select>
+      <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="aiAddFoods()">➕ הוסף ליומן</button>
+      <div class="muted" style="text-align:center;margin-top:6px;font-size:12px">אפשר לערוך כל פריט אחרי ההוספה</div>
+    </div>`;
+  }
+  function aiAddFoods() {
+    if (!_aiFood || !_aiFood.items) return;
+    const type = (el('ai-meal-type') && el('ai-meal-type').value) || 'נשנוש';
+    const arr = meals();
+    _aiFood.items.forEach(it => {
+      arr.push({ id: genId(), name: (it.name||'מאכל') + (it.amount?(' ('+it.amount+')'):''), type, date: nutritionDate,
+        cal:+it.cal||0, protein:+it.protein||0, carbs:+it.carbs||0, fat:+it.fat||0 });
+    });
+    save(pk('meals'), arr); _aiFood = null; toast('✓ נוסף ליומן'); refreshAll();
   }
 
   /* ============================================================
