@@ -17,6 +17,7 @@
   <!-- ===== Firebase SDK ===== -->
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 
   <!-- ===== Fonts ===== -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -357,15 +358,15 @@
     { id:'settings',  label:'הגדרות',  ic:'⚙️' },
   ];
 
-  // ── Firebase ── (להפעלת סנכרון ענן: צור פרויקט ב-Firebase והדבק כאן את הפרטים)
+  // ── Firebase ── סנכרון ענן (Realtime Database + Anonymous Auth)
   const firebaseConfig = {
-    apiKey:            "PASTE_YOUR_API_KEY_HERE",
-    authDomain:        "PASTE.firebaseapp.com",
-    databaseURL:       "https://PASTE-default-rtdb.firebaseio.com",
-    projectId:         "PASTE",
-    storageBucket:     "PASTE.appspot.com",
-    messagingSenderId: "PASTE",
-    appId:             "PASTE"
+    apiKey:            "AIzaSyBMDwDabJfpe8lMXGG0MFUo4Yv4veidbUE",
+    authDomain:        "tzuna-88a1a.firebaseapp.com",
+    databaseURL:       "https://tzuna-88a1a-default-rtdb.firebaseio.com",
+    projectId:         "tzuna-88a1a",
+    storageBucket:     "tzuna-88a1a.firebasestorage.app",
+    messagingSenderId: "787619922039",
+    appId:             "1:787619922039:web:3e67f7c26e675641b5c672"
   };
   const CLOUD_CONFIGURED = firebaseConfig.apiKey !== 'PASTE_YOUR_API_KEY_HERE';
 
@@ -433,8 +434,9 @@
     if (!CLOUD_CONFIGURED) { console.warn('Firebase not configured — local-only mode'); return Promise.resolve(); }
     try {
       firebase.initializeApp(firebaseConfig);
-      firebaseDB = firebase.database();
-      return firebaseDB.ref().once('value').then(snapshot => {
+      return firebase.auth().signInAnonymously()
+        .then(() => { firebaseDB = firebase.database(); return firebaseDB.ref().once('value'); })
+        .then(snapshot => {
         const root = snapshot.val() || {};
         const cloudData = root.app_data || {}, cloudMeta = root.app_meta || {};
         ALL_KEYS.forEach(key => {
