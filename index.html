@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>כושר ותזונה</title>
+
+  <!-- ===== PWA ===== -->
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="כושר ותזונה" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+
+  <!-- ===== Firebase SDK ===== -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+  <!-- ===== Fonts ===== -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    /* ===== DESIGN TOKENS ===== */
+    :root {
+      --bg:#f1f5f9; --surface:#ffffff; --surface2:#f8fafc; --surface3:#eef2f7;
+      --border:#e2e8f0; --text:#0f172a; --text-muted:#64748b;
+      --accent:#0ea5e9; --accent2:#22d3ee; --accent-soft:rgba(14,165,233,0.12);
+      --green:#16a34a; --carb:#f59e0b; --fat:#8b5cf6; --red:#ef4444;
+      --radius:18px;
+      --shadow:0 1px 2px rgba(15,23,42,.04),0 4px 16px rgba(15,23,42,.06);
+      --shadow-lg:0 12px 34px rgba(15,23,42,.16);
+    }
+    [data-theme="dark"] {
+      --bg:#0f172a; --surface:#1e293b; --surface2:#243349; --surface3:#334155;
+      --border:#334155; --text:#f1f5f9; --text-muted:#94a3b8;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.35);
+      --shadow-lg:0 14px 36px rgba(0,0,0,.55);
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html, body { height:100%; }
+    body {
+      font-family:'Heebo',system-ui,sans-serif; background:var(--bg); color:var(--text);
+      -webkit-font-smoothing:antialiased; line-height:1.4;
+    }
+    .hidden { display:none !important; }
+    .muted { color:var(--text-muted); font-size:13px; }
+    button { font-family:inherit; }
+
+    /* ===== BUTTONS ===== */
+    .btn { border:none; border-radius:14px; padding:13px 18px; font-size:15px; font-weight:800; cursor:pointer; transition:transform .1s, opacity .15s; }
+    .btn:active { transform:scale(.97); }
+    .btn-primary { background:var(--accent); color:#fff; }
+    .btn-ghost { background:var(--surface2); color:var(--text); border:1.5px solid var(--border); }
+    .btn-danger-ghost { background:transparent; color:var(--red); border:1.5px solid var(--red); }
+    .btn-block { width:100%; display:block; }
+    .btn-sm { padding:9px 14px; font-size:13.5px; border-radius:11px; }
+
+    /* ===== INPUTS ===== */
+    label { display:block; font-size:13px; font-weight:700; color:var(--text-muted); margin-bottom:6px; }
+    .inp {
+      width:100%; background:var(--surface2); border:1.5px solid var(--border); border-radius:12px;
+      padding:12px 14px; font-size:16px; color:var(--text); outline:none; font-family:inherit; margin-bottom:13px;
+    }
+    .inp:focus { border-color:var(--accent); }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
+
+    /* ===== SCREENS (login + lobby) ===== */
+    .screen { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; }
+    .login-box { width:100%; max-width:340px; }
+    .login-logo { font-size:56px; }
+    .login-title { font-size:30px; font-weight:900; margin-top:6px; }
+    .login-sub { color:var(--text-muted); margin-bottom:26px; }
+    .login-err { color:var(--red); margin-top:8px; min-height:20px; font-weight:700; font-size:14px; }
+
+    .lobby-head { font-size:30px; font-weight:900; }
+    .lobby-sub { color:var(--text-muted); margin:6px 0 32px; }
+    .lobby-cards { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; width:100%; max-width:520px; }
+    .lobby-card { flex:1 1 150px; min-width:150px; border-radius:26px; padding:30px 18px; color:#fff; cursor:pointer; position:relative; overflow:hidden; box-shadow:var(--shadow-lg); transition:transform .15s; }
+    .lobby-card:active { transform:scale(.96); }
+    .lc-emoji { font-size:50px; }
+    .lc-name { font-size:25px; font-weight:900; margin-top:8px; }
+    .lc-sub { font-size:13px; opacity:.92; margin-top:5px; }
+    .lobby-logout { margin-top:34px; background:none; border:none; color:var(--text-muted); font-weight:700; cursor:pointer; font-size:14px; }
+
+    /* ===== APP LAYOUT ===== */
+    #app { display:flex; min-height:100vh; }
+    .sidebar { width:222px; background:var(--surface); border-left:1px solid var(--border); padding:18px 12px; position:fixed; top:0; bottom:0; right:0; display:flex; flex-direction:column; z-index:50; }
+    .side-person { display:flex; align-items:center; gap:10px; padding:11px; border-radius:15px; background:var(--accent-soft); margin-bottom:16px; cursor:pointer; }
+    .side-person .av { width:40px; height:40px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:21px; flex:0 0 auto; }
+    .side-person .nm { font-weight:800; font-size:15px; }
+    .side-person .sw { font-size:11px; color:var(--text-muted); }
+    .nav-link { display:flex; align-items:center; gap:11px; padding:11px 14px; border-radius:13px; color:var(--text-muted); font-weight:700; font-size:14.5px; cursor:pointer; margin-bottom:3px; }
+    .nav-link.active { background:var(--accent-soft); color:var(--accent); }
+    .nav-link .ic { font-size:18px; width:22px; text-align:center; }
+
+    .main { flex:1; margin-right:222px; padding:26px 24px 44px; max-width:780px; }
+    .bottomnav { display:none; }
+    .fab { position:fixed; bottom:80px; left:18px; width:56px; height:56px; border-radius:50%; background:var(--accent); color:#fff; font-size:30px; border:none; box-shadow:var(--shadow-lg); cursor:pointer; z-index:90; display:flex; align-items:center; justify-content:center; line-height:1; }
+    .fab:active { transform:scale(.92); }
+
+    @media (max-width:768px) {
+      .sidebar { display:none; }
+      .main { margin-right:0; padding:calc(16px + env(safe-area-inset-top)) 14px 96px; max-width:100%; }
+      .bottomnav { display:flex; position:fixed; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--border); padding:7px 4px calc(7px + env(safe-area-inset-bottom)); justify-content:space-around; z-index:100; }
+      .bn-item { display:flex; flex-direction:column; align-items:center; gap:2px; font-size:10px; color:var(--text-muted); cursor:pointer; flex:1; padding:3px; font-weight:700; }
+      .bn-item.active { color:var(--accent); }
+      .bn-item .ic { font-size:21px; }
+      .fab { bottom:86px; }
+    }
+    @media (min-width:769px) { .fab { bottom:30px; left:30px; } }
+
+    /* ===== PAGE HEADER ===== */
+    .page { display:none; }
+    .page.active { display:block; animation:fade .25s; }
+    @keyframes fade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+    .phead { display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:20px; gap:12px; }
+    .phead h2 { font-size:27px; font-weight:900; letter-spacing:-.01em; }
+    .phead p { font-size:13px; color:var(--text-muted); margin-top:3px; }
+
+    /* ===== CARDS ===== */
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); margin-bottom:14px; }
+    .card-title { font-size:15px; font-weight:800; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+    .stat { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:15px 10px; text-align:center; box-shadow:var(--shadow); }
+    .stat-num { font-size:23px; font-weight:900; }
+    .stat-lbl { font-size:11px; color:var(--text-muted); margin-top:3px; }
+
+    /* ===== CALORIE RING ===== */
+    .ring-wrap { display:flex; align-items:center; gap:18px; }
+    .ring { position:relative; width:138px; height:138px; border-radius:50%; flex:0 0 auto;
+      background:conic-gradient(var(--accent) calc(var(--p,0)*1%), var(--surface3) 0); display:flex; align-items:center; justify-content:center; }
+    .ring::before { content:''; position:absolute; inset:13px; background:var(--surface); border-radius:50%; }
+    .ring-in { position:relative; text-align:center; }
+    .ring-num { font-size:30px; font-weight:900; line-height:1; }
+    .ring-lbl { font-size:11px; color:var(--text-muted); margin-top:4px; }
+    .ring-side { flex:1; }
+    .ring-side .big { font-size:24px; font-weight:900; }
+    .ring-side .lbl { font-size:12px; color:var(--text-muted); }
+
+    /* ===== PROGRESS BARS ===== */
+    .macro { margin-bottom:13px; }
+    .macro:last-child { margin-bottom:0; }
+    .macro-top { display:flex; justify-content:space-between; font-size:13px; font-weight:700; margin-bottom:6px; }
+    .macro-top span:last-child { color:var(--text-muted); }
+    .bar { height:9px; background:var(--surface3); border-radius:99px; overflow:hidden; }
+    .bar > i { display:block; height:100%; border-radius:99px; transition:width .4s; }
+
+    /* ===== WATER ===== */
+    .water-row { display:flex; align-items:center; justify-content:space-between; gap:14px; }
+    .water-glasses { font-size:24px; letter-spacing:2px; }
+    .round-btn { width:38px; height:38px; border-radius:50%; border:1.5px solid var(--border); background:var(--surface2); font-size:20px; font-weight:900; color:var(--text); cursor:pointer; line-height:1; }
+    .round-btn:active { transform:scale(.9); }
+
+    /* ===== LIST ITEMS ===== */
+    .item { display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid var(--border); cursor:pointer; }
+    .item:last-child { border-bottom:none; }
+    .item-main { flex:1; min-width:0; }
+    .item-title { font-weight:700; font-size:15px; }
+    .item-sub { font-size:12.5px; color:var(--text-muted); margin-top:2px; }
+    .item-val { font-weight:800; font-size:15px; white-space:nowrap; }
+    .chip { display:inline-block; font-size:11.5px; font-weight:700; background:var(--accent-soft); color:var(--accent); padding:3px 9px; border-radius:99px; margin:2px 0 0 4px; }
+    .empty { text-align:center; color:var(--text-muted); font-size:14px; padding:34px 14px; line-height:1.7; }
+    .sec-label { font-size:12px; font-weight:800; color:var(--text-muted); margin:16px 0 6px; }
+
+    /* date nav */
+    .datenav { display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:16px; }
+    .datenav button { background:var(--surface2); border:1.5px solid var(--border); border-radius:10px; width:36px; height:36px; font-size:18px; cursor:pointer; color:var(--text); }
+    .datenav .dlabel { font-weight:800; font-size:15px; min-width:150px; text-align:center; }
+
+    /* ===== MODALS ===== */
+    .modal { position:fixed; inset:0; background:rgba(15,23,42,.55); display:none; align-items:flex-end; justify-content:center; z-index:200; }
+    .modal.open { display:flex; }
+    .modal-card { background:var(--surface); width:100%; max-width:480px; border-radius:26px 26px 0 0; padding:22px 20px calc(22px + env(safe-area-inset-bottom)); max-height:92vh; overflow:auto; animation:slideup .25s; }
+    @keyframes slideup { from { transform:translateY(100%); } to { transform:none; } }
+    .modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+    .modal-head h3 { font-size:20px; font-weight:900; }
+    .modal-x { background:var(--surface2); border:none; width:34px; height:34px; border-radius:50%; font-size:16px; cursor:pointer; color:var(--text); }
+    @media (min-width:769px) { .modal { align-items:center; } .modal-card { border-radius:26px; } }
+
+    .ex-row { display:grid; grid-template-columns:1fr 56px 56px 64px 30px; gap:7px; align-items:center; margin-bottom:9px; }
+    .ex-row .inp { margin-bottom:0; padding:10px 8px; font-size:14px; text-align:center; }
+    .ex-row .inp.ex-name { text-align:right; }
+    .ex-x { background:none; border:none; color:var(--red); font-size:18px; cursor:pointer; }
+    .ex-head { display:grid; grid-template-columns:1fr 56px 56px 64px 30px; gap:7px; font-size:11px; color:var(--text-muted); font-weight:700; margin-bottom:5px; text-align:center; }
+    .ex-head span:first-child { text-align:right; }
+
+    /* ===== TOAST ===== */
+    .toast { position:fixed; bottom:96px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--text); color:var(--surface); padding:12px 22px; border-radius:99px; font-weight:700; font-size:14px; opacity:0; pointer-events:none; transition:.25s; z-index:300; white-space:nowrap; }
+    .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+    /* ===== INSTALL BANNER ===== */
+    .install-banner { position:fixed; bottom:84px; left:12px; right:12px; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:12px 14px; display:none; align-items:center; gap:12px; box-shadow:var(--shadow-lg); z-index:96; }
+    .install-banner .ib-txt { flex:1; }
+    .install-banner .ib-t { font-weight:800; font-size:14px; }
+    .install-banner .ib-s { font-size:12px; color:var(--text-muted); }
+  </style>
+</head>
+<body>
+
+  <!-- ===== LOGIN ===== -->
+  <div id="login-screen" class="screen">
+    <div class="login-box">
+      <div class="login-logo">🏋️</div>
+      <div class="login-title">כושר ותזונה</div>
+      <div class="login-sub">מעקב אישי</div>
+      <input id="login-pass" class="inp" type="password" inputmode="numeric" placeholder="סיסמה" onkeydown="if(event.key==='Enter')doLogin()" />
+      <button class="btn btn-primary btn-block" onclick="doLogin()">כניסה</button>
+      <div id="login-err" class="login-err"></div>
+    </div>
+  </div>
+
+  <!-- ===== LOBBY ===== -->
+  <div id="lobby-screen" class="screen hidden">
+    <div class="lobby-head">היי 👋</div>
+    <div class="lobby-sub">בחר/י פרופיל — מעקב נפרד לכל אחד</div>
+    <div class="lobby-cards" id="lobby-cards"></div>
+    <button class="lobby-logout" onclick="logout()">יציאה מהמערכת</button>
+  </div>
+
+  <!-- ===== APP ===== -->
+  <div id="app" class="hidden">
+    <aside class="sidebar">
+      <div class="side-person" onclick="backToLobby()" title="החלפת פרופיל">
+        <div class="av" id="side-av">🙂</div>
+        <div>
+          <div class="nm" id="side-name">—</div>
+          <div class="sw">↩ החלפת פרופיל</div>
+        </div>
+      </div>
+      <nav id="sidebar-nav"></nav>
+      <div style="margin-top:auto; font-size:11px; color:var(--text-muted); text-align:center; padding-top:12px;">
+        כושר ותזונה · v<span id="ver-side">1</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div id="page-dashboard" class="page"></div>
+      <div id="page-nutrition" class="page"></div>
+      <div id="page-workouts" class="page"></div>
+      <div id="page-metrics" class="page"></div>
+      <div id="page-settings" class="page"></div>
+    </main>
+
+    <nav class="bottomnav" id="bottom-nav"></nav>
+    <button class="fab" id="fab" onclick="fabAction()">+</button>
+  </div>
+
+  <!-- ===== MEAL MODAL ===== -->
+  <div class="modal" id="modal-meal">
+    <div class="modal-card">
+      <div class="modal-head"><h3 id="meal-title">ארוחה חדשה</h3><button class="modal-x" onclick="closeModal('meal')">✕</button></div>
+      <label>מה אכלת</label>
+      <input id="meal-name" class="inp" placeholder="לדוגמה: חזה עוף עם אורז" />
+      <div class="grid2">
+        <div><label>סוג ארוחה</label>
+          <select id="meal-type" class="inp">
+            <option>ארוחת בוקר</option><option>ארוחת צהריים</option><option>ארוחת ערב</option><option>נשנוש</option>
+          </select>
+        </div>
+        <div><label>תאריך</label><input id="meal-date" type="date" class="inp" /></div>
+      </div>
+      <div class="grid2">
+        <div><label>קלוריות</label><input id="meal-cal" type="number" inputmode="numeric" class="inp" placeholder="0" /></div>
+        <div><label>חלבון (ג')</label><input id="meal-protein" type="number" inputmode="numeric" class="inp" placeholder="0" /></div>
+        <div><label>פחמימות (ג')</label><input id="meal-carbs" type="number" inputmode="numeric" class="inp" placeholder="0" /></div>
+        <div><label>שומן (ג')</label><input id="meal-fat" type="number" inputmode="numeric" class="inp" placeholder="0" /></div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="saveMeal()">שמירה</button>
+      <button class="btn btn-danger-ghost btn-block" id="meal-del" style="display:none;margin-top:10px" onclick="deleteMeal()">מחיקה</button>
+    </div>
+  </div>
+
+  <!-- ===== WORKOUT MODAL ===== -->
+  <div class="modal" id="modal-workout">
+    <div class="modal-card">
+      <div class="modal-head"><h3 id="wk-title">אימון חדש</h3><button class="modal-x" onclick="closeModal('workout')">✕</button></div>
+      <label>שם האימון</label>
+      <input id="wk-name" class="inp" placeholder="לדוגמה: חזה + טריצפס" />
+      <div class="grid2">
+        <div><label>תאריך</label><input id="wk-date" type="date" class="inp" /></div>
+        <div><label>משך (דקות)</label><input id="wk-duration" type="number" inputmode="numeric" class="inp" placeholder="0" /></div>
+      </div>
+      <label>תרגילים</label>
+      <div class="ex-head"><span>תרגיל</span><span>סטים</span><span>חזרות</span><span>ק"ג</span><span></span></div>
+      <div id="wk-exercises"></div>
+      <button class="btn btn-ghost btn-block btn-sm" style="margin:4px 0 13px" onclick="addExerciseRow()">+ תרגיל</button>
+      <label>הערות</label>
+      <input id="wk-notes" class="inp" placeholder="איך הרגשת? משקלים?" />
+      <button class="btn btn-primary btn-block" onclick="saveWorkout()">שמירה</button>
+      <button class="btn btn-danger-ghost btn-block" id="wk-del" style="display:none;margin-top:10px" onclick="deleteWorkout()">מחיקה</button>
+    </div>
+  </div>
+
+  <!-- ===== METRIC MODAL ===== -->
+  <div class="modal" id="modal-metric">
+    <div class="modal-card">
+      <div class="modal-head"><h3 id="mt-title">שקילה חדשה</h3><button class="modal-x" onclick="closeModal('metric')">✕</button></div>
+      <div class="grid2">
+        <div><label>תאריך</label><input id="mt-date" type="date" class="inp" /></div>
+        <div><label>משקל (ק"ג)</label><input id="mt-weight" type="number" inputmode="decimal" step="0.1" class="inp" placeholder="0.0" /></div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="saveMetric()">שמירה</button>
+      <button class="btn btn-danger-ghost btn-block" id="mt-del" style="display:none;margin-top:10px" onclick="deleteMetric()">מחיקה</button>
+    </div>
+  </div>
+
+  <!-- ===== iOS INSTALL MODAL ===== -->
+  <div class="modal" id="modal-ios">
+    <div class="modal-card">
+      <div class="modal-head"><h3>התקנה לאייפון</h3><button class="modal-x" onclick="closeModal('ios')">✕</button></div>
+      <p style="line-height:1.9;font-size:15px">
+        כדי להוסיף את האפליקציה למסך הבית:<br>
+        1. לחצו על כפתור <b>שיתוף</b> ⬆️ למטה בספארי<br>
+        2. גללו ובחרו <b>הוסף למסך הבית</b><br>
+        3. לחצו <b>הוסף</b> ✓
+      </p>
+      <button class="btn btn-primary btn-block" style="margin-top:14px" onclick="closeModal('ios')">הבנתי</button>
+    </div>
+  </div>
+
+  <!-- ===== INSTALL BANNER ===== -->
+  <div class="install-banner" id="install-banner">
+    <div style="font-size:26px">📲</div>
+    <div class="ib-txt">
+      <div class="ib-t">התקן את האפליקציה</div>
+      <div class="ib-s" id="ib-sub">הוסף למסך הבית</div>
+    </div>
+    <button class="btn btn-primary btn-sm" id="install-btn" onclick="triggerInstall()">התקן</button>
+    <button class="modal-x" onclick="dismissInstallBanner()">✕</button>
+  </div>
+
+  <!-- ===== TOAST ===== -->
+  <div id="toast" class="toast"></div>
+
+  <script>
+  /* ============================================================
+     CONFIG
+     ============================================================ */
+  const APP_NAME = 'כושר ותזונה';
+  const PASS = '110';            // סיסמת כניסה — שנה כאן אם תרצה
+
+  const PEOPLE = {
+    hadar: { name:'הדר',    emoji:'🌸', accent:'#ec4899', accent2:'#f472b6', soft:'rgba(236,72,153,0.13)', grad:'linear-gradient(140deg,#ec4899,#a855f7)' },
+    elior: { name:'אליאור', emoji:'💪', accent:'#0ea5e9', accent2:'#22d3ee', soft:'rgba(14,165,233,0.13)', grad:'linear-gradient(140deg,#0ea5e9,#14b8a6)' }
+  };
+
+  const NAV = [
+    { id:'dashboard', label:'בית',     ic:'🏠' },
+    { id:'nutrition', label:'תזונה',   ic:'🍎' },
+    { id:'workouts',  label:'אימונים', ic:'🏋️' },
+    { id:'metrics',   label:'מדדים',   ic:'📊' },
+    { id:'settings',  label:'הגדרות',  ic:'⚙️' },
+  ];
+
+  // ── Firebase ── (להפעלת סנכרון ענן: צור פרויקט ב-Firebase והדבק כאן את הפרטים)
+  const firebaseConfig = {
+    apiKey:            "PASTE_YOUR_API_KEY_HERE",
+    authDomain:        "PASTE.firebaseapp.com",
+    databaseURL:       "https://PASTE-default-rtdb.firebaseio.com",
+    projectId:         "PASTE",
+    storageBucket:     "PASTE.appspot.com",
+    messagingSenderId: "PASTE",
+    appId:             "PASTE"
+  };
+  const CLOUD_CONFIGURED = firebaseConfig.apiKey !== 'PASTE_YOUR_API_KEY_HERE';
+
+  /* ============================================================
+     STATE
+     ============================================================ */
+  let currentPerson = null;
+  let currentPage = 'dashboard';
+  let nutritionDate = todayStr();
+  let editingMealId = null, editingWk = null, editingMetric = null;
+
+  const DATA_TYPES = ['meals','workouts','metrics','water'];
+  const ALL_KEYS = (() => {
+    const k = [];
+    Object.keys(PEOPLE).forEach(p => { DATA_TYPES.forEach(t => k.push(p+'_'+t)); k.push(p+'_goals'); });
+    return k;
+  })();
+
+  const DEFAULT_GOALS = { cal:2000, protein:130, carbs:220, fat:65, water:8, weight:null, workoutsPerWeek:4 };
+
+  /* ============================================================
+     STORAGE  (local-first + cloud sync)
+     ============================================================ */
+  let firebaseDB = null, firebaseReady = false;
+
+  const load = key => { try { return JSON.parse(localStorage.getItem('s_'+key) || '[]'); } catch(e){ return []; } };
+  function save(key, val) {
+    const ts = Date.now();
+    localStorage.setItem('s_'+key, JSON.stringify(val));
+    localStorage.setItem('s_'+key+'_ts', String(ts));
+    _pending[key] = { data: val, ts };
+    _savePending();
+    _pushKey(key);
+  }
+  function getGoals() {
+    try { return Object.assign({}, DEFAULT_GOALS, JSON.parse(localStorage.getItem('s_'+currentPerson+'_goals') || '{}')); }
+    catch(e){ return { ...DEFAULT_GOALS }; }
+  }
+  function saveGoals(g) { save(currentPerson+'_goals', g); }
+
+  // ── Sync engine: resilient pending queue (survives app close) ──
+  let _pending = {};
+  function _loadPending() { try { _pending = JSON.parse(localStorage.getItem('_sync_pending') || '{}'); } catch(e){ _pending = {}; } }
+  function _savePending() { try { localStorage.setItem('_sync_pending', JSON.stringify(_pending)); } catch(e){} }
+  function _markClean(key) { if (_pending[key]) { delete _pending[key]; _savePending(); } }
+  function _pushKey(key) {
+    if (!firebaseDB || !_pending[key]) return;
+    const snap = _pending[key];
+    const updates = {};
+    updates['app_data/' + key] = snap.data;
+    updates['app_meta/' + key] = snap.ts || Date.now();
+    firebaseDB.ref().update(updates)
+      .then(() => setTimeout(() => _markClean(key), 8000))
+      .catch(() => {});
+  }
+  function flushPending() { Object.keys(_pending).forEach(_pushKey); }
+  function pushAllToCloud() {
+    if (!firebaseDB) return;
+    ALL_KEYS.forEach(k => { const v = localStorage.getItem('s_'+k); if (v) { _pending[k] = { data: JSON.parse(v), ts: Date.now() }; _pushKey(k); } });
+    _savePending();
+  }
+
+  function initFirebase() {
+    _loadPending();
+    if (!CLOUD_CONFIGURED) { console.warn('Firebase not configured — local-only mode'); return Promise.resolve(); }
+    try {
+      firebase.initializeApp(firebaseConfig);
+      firebaseDB = firebase.database();
+      return firebaseDB.ref().once('value').then(snapshot => {
+        const root = snapshot.val() || {};
+        const cloudData = root.app_data || {}, cloudMeta = root.app_meta || {};
+        ALL_KEYS.forEach(key => {
+          if (_pending[key]) {
+            localStorage.setItem('s_'+key, JSON.stringify(_pending[key].data));
+            if (_pending[key].ts) localStorage.setItem('s_'+key+'_ts', String(_pending[key].ts));
+            _pushKey(key);
+            return;
+          }
+          const cloudVal = cloudData[key];
+          const hasCloud = cloudVal != null && (Array.isArray(cloudVal) ? cloudVal.length>0 : Object.keys(cloudVal).length>0);
+          const cloudTs = parseInt(cloudMeta[key] || '0', 10);
+          const localTs = parseInt(localStorage.getItem('s_'+key+'_ts') || '0', 10);
+          if (hasCloud) {
+            if (cloudTs === 0 || localTs === 0 || cloudTs > localTs) {
+              localStorage.setItem('s_'+key, JSON.stringify(cloudVal));
+              if (cloudTs > 0) localStorage.setItem('s_'+key+'_ts', String(cloudTs));
+            } else if (localTs > cloudTs) {
+              const raw = localStorage.getItem('s_'+key);
+              if (raw) { _pending[key] = { data: JSON.parse(raw), ts: localTs }; _savePending(); _pushKey(key); }
+            }
+          } else {
+            const raw = localStorage.getItem('s_'+key);
+            if (raw) {
+              const v = JSON.parse(raw);
+              if (v && (Array.isArray(v) ? v.length>0 : Object.keys(v).length>0)) {
+                _pending[key] = { data: v, ts: localTs || Date.now() }; _savePending(); _pushKey(key);
+              }
+            }
+          }
+        });
+        firebaseReady = true;
+        setTimeout(autoBackup, 3000);
+        console.log('Firebase ✓');
+      }).catch(err => console.warn('Firebase load failed — local data:', err.message));
+    } catch(e) { console.warn('Firebase init failed:', e.message); return Promise.resolve(); }
+  }
+
+  function _syncFromCloud(reason) {
+    if (!firebaseDB) return;
+    flushPending();
+    firebaseDB.ref().once('value').then(snapshot => {
+      const root = snapshot.val() || {};
+      const cloudData = root.app_data || {}, cloudMeta = root.app_meta || {};
+      let changed = false;
+      ALL_KEYS.forEach(key => {
+        if (_pending[key]) return;
+        if (cloudData[key] === undefined) return;
+        const localTs = parseInt(localStorage.getItem('s_'+key+'_ts') || '0', 10);
+        const cloudTs = parseInt(cloudMeta[key] || '0', 10);
+        if (cloudTs > 0 && localTs > 0 && cloudTs <= localTs) return;
+        const cur = localStorage.getItem('s_'+key), next = JSON.stringify(cloudData[key]);
+        if (cur !== next) { localStorage.setItem('s_'+key, next); if (cloudTs>0) localStorage.setItem('s_'+key+'_ts', String(cloudTs)); changed = true; }
+      });
+      if (changed) { refreshAll(); console.log('🔄', reason); }
+    }).catch(() => {});
+  }
+
+  // ── Auto-backup (daily snapshot, keep 30 days + monthly checkpoints) ──
+  const BACKUP_KEEP_DAYS = 30;
+  function _collectAll() { const d={}; ALL_KEYS.forEach(k=>{ const v=localStorage.getItem('s_'+k); if(v){ try{ d[k]=JSON.parse(v); }catch(e){} } }); return d; }
+  function _hasData(d) { return Object.values(d).some(v => Array.isArray(v) && v.length>0); }
+  function autoBackup() {
+    try {
+      const today = todayStr(), data = _collectAll();
+      if (!_hasData(data)) return;
+      try { localStorage.setItem('_local_backup', JSON.stringify({ date: today, ts: Date.now(), data })); } catch(e){}
+      if (firebaseDB) firebaseDB.ref('app_backups/'+today).set({ ts: Date.now(), data }).then(_pruneBackups).catch(()=>{});
+    } catch(e){}
+  }
+  function _pruneBackups() {
+    if (!firebaseDB) return;
+    firebaseDB.ref('app_backups').once('value').then(snap => {
+      const all = snap.val() || {}, dates = Object.keys(all).sort();
+      const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-BACKUP_KEEP_DAYS);
+      const cutoffStr = cutoff.toISOString().slice(0,10), monthKept = {}, updates = {};
+      dates.forEach(d => { if (d>=cutoffStr) return; const m=d.slice(0,7); if(!monthKept[m]) monthKept[m]=d; else updates['app_backups/'+d]=null; });
+      if (Object.keys(updates).length) firebaseDB.ref().update(updates).catch(()=>{});
+    }).catch(()=>{});
+  }
+
+  /* ============================================================
+     UTILS
+     ============================================================ */
+  const el = id => document.getElementById(id);
+  const genId = () => 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  const r0 = n => Math.round(n || 0);
+  function todayStr() { const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function parseD(s) { return new Date(s + 'T00:00:00'); }
+  function dateLabel(s) { const d=parseD(s); const t=todayStr(); if(s===t) return 'היום'; const y=new Date(); y.setDate(y.getDate()-1); const ys=y.getFullYear()+'-'+String(y.getMonth()+1).padStart(2,'0')+'-'+String(y.getDate()).padStart(2,'0'); if(s===ys) return 'אתמול'; return d.toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long'}); }
+  function shortDate(s) { return parseD(s).toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit'}); }
+  function greeting() { const h=new Date().getHours(); if(h<12) return 'בוקר טוב'; if(h<17) return 'צהריים טובים'; if(h<21) return 'ערב טוב'; return 'לילה טוב'; }
+  function toast(msg) { const t=el('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2400); }
+  function pk(t) { return currentPerson + '_' + t; }
+  function esc(s) { return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  // data accessors
+  const meals    = () => load(pk('meals'));
+  const workouts = () => load(pk('workouts'));
+  const metrics  = () => load(pk('metrics'));
+  const waterArr = () => load(pk('water'));
+  function getWater(date){ const w=waterArr().find(x=>x.date===date); return w?w.glasses:0; }
+  function setWater(date,n){ const a=waterArr(); const i=a.findIndex(x=>x.date===date); if(i>=0){ if(n<=0)a.splice(i,1); else a[i].glasses=n; } else if(n>0){ a.push({date,glasses:n}); } save(pk('water'),a); }
+  function dayTotals(date){ const t={cal:0,protein:0,carbs:0,fat:0}; meals().filter(m=>m.date===date).forEach(m=>{ t.cal+=+m.cal||0; t.protein+=+m.protein||0; t.carbs+=+m.carbs||0; t.fat+=+m.fat||0; }); return t; }
+  function weekStart(){ const d=new Date(); d.setDate(d.getDate()-d.getDay()); d.setHours(0,0,0,0); return d; }
+  function inThisWeek(s){ const d=parseD(s), ws=weekStart(), we=new Date(ws); we.setDate(we.getDate()+7); return d>=ws && d<we; }
+
+  /* ============================================================
+     AUTH + LOBBY
+     ============================================================ */
+  function doLogin() {
+    if (el('login-pass').value === PASS) {
+      localStorage.setItem('fit_authed','1');
+      el('login-pass').value = '';
+      showLobby();
+    } else {
+      el('login-err').textContent = '❌ סיסמה שגויה';
+      el('login-pass').value = ''; el('login-pass').focus();
+      setTimeout(() => el('login-err').textContent = '', 2000);
+    }
+  }
+  function logout() { localStorage.removeItem('fit_authed'); el('lobby-screen').classList.add('hidden'); el('app').classList.add('hidden'); el('login-screen').classList.remove('hidden'); }
+
+  function showLobby() {
+    el('login-screen').classList.add('hidden');
+    el('app').classList.add('hidden');
+    el('lobby-screen').classList.remove('hidden');
+    el('lobby-cards').innerHTML = Object.keys(PEOPLE).map(id => {
+      const p = PEOPLE[id];
+      return `<div class="lobby-card" style="background:${p.grad}" onclick="enterPerson('${id}')">
+        <div class="lc-emoji">${p.emoji}</div>
+        <div class="lc-name">${p.name}</div>
+        <div class="lc-sub">כושר · תזונה · מדדים</div>
+      </div>`;
+    }).join('');
+  }
+
+  function applyAccent(id) {
+    const p = PEOPLE[id], r = document.documentElement.style;
+    r.setProperty('--accent', p.accent);
+    r.setProperty('--accent2', p.accent2);
+    r.setProperty('--accent-soft', p.soft);
+  }
+
+  function enterPerson(id) {
+    currentPerson = id;
+    applyAccent(id);
+    el('lobby-screen').classList.add('hidden');
+    el('app').classList.remove('hidden');
+    const p = PEOPLE[id];
+    el('side-av').textContent = p.emoji;
+    el('side-name').textContent = p.name;
+    nutritionDate = todayStr();
+    showPage('dashboard');
+  }
+  function backToLobby() { currentPerson = null; showLobby(); }
+
+  /* ============================================================
+     NAVIGATION
+     ============================================================ */
+  function buildNav() {
+    el('sidebar-nav').innerHTML = NAV.map(n =>
+      `<div class="nav-link" data-page="${n.id}" onclick="showPage('${n.id}')"><span class="ic">${n.ic}</span> ${n.label}</div>`).join('');
+    el('bottom-nav').innerHTML = NAV.map(n =>
+      `<div class="bn-item" data-page="${n.id}" onclick="showPage('${n.id}')"><span class="ic">${n.ic}</span>${n.label}</div>`).join('');
+  }
+  function showPage(name) {
+    currentPage = name;
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    el('page-'+name).classList.add('active');
+    document.querySelectorAll('[data-page]').forEach(a => a.classList.toggle('active', a.dataset.page===name));
+    el('fab').style.display = (name==='settings') ? 'none' : 'flex';
+    window.scrollTo(0,0);
+    render(name);
+  }
+  function fabAction() {
+    if (currentPage==='workouts') openWorkoutModal();
+    else if (currentPage==='metrics') openMetricModal();
+    else openMealModal();
+  }
+  function refreshAll() { if (currentPerson && !el('app').classList.contains('hidden')) render(currentPage); }
+  function render(name) {
+    if (!currentPerson) return;
+    ({ dashboard:renderDashboard, nutrition:renderNutrition, workouts:renderWorkouts, metrics:renderMetrics, settings:renderSettings }[name] || (()=>{}))();
+  }
+
+  /* ============================================================
+     RENDER — DASHBOARD
+     ============================================================ */
+  function renderDashboard() {
+    const g = getGoals(), t = dayTotals(todayStr()), p = PEOPLE[currentPerson];
+    const calPct = g.cal ? Math.min(100, t.cal/g.cal*100) : 0;
+    const remaining = Math.max(0, g.cal - t.cal);
+    const water = getWater(todayStr());
+    const todayWk = workouts().filter(w => w.date === todayStr());
+    const ms = metrics().slice().sort((a,b)=> a.date<b.date?-1:1);
+    const lastW = ms.length ? ms[ms.length-1].weight : null;
+    const prevW = ms.length>1 ? ms[ms.length-2].weight : null;
+    const wChange = (lastW!=null && prevW!=null) ? (lastW-prevW) : null;
+    const wkWeek = workouts().filter(w => inThisWeek(w.date)).length;
+
+    el('page-dashboard').innerHTML = `
+      <div class="phead"><div><h2>${greeting()}, ${p.name} ${p.emoji}</h2><p>${dateLabel(todayStr())}</p></div></div>
+
+      <div class="card">
+        <div class="card-title">קלוריות היום</div>
+        <div class="ring-wrap">
+          <div class="ring" style="--p:${calPct}"><div class="ring-in"><div class="ring-num">${r0(t.cal)}</div><div class="ring-lbl">מתוך ${r0(g.cal)}</div></div></div>
+          <div class="ring-side">
+            <div class="big" style="color:var(--accent)">${remaining}</div>
+            <div class="lbl">קלוריות נותרו</div>
+          </div>
+        </div>
+        <div style="margin-top:18px">
+          ${macroBar('חלבון', t.protein, g.protein, 'var(--accent)')}
+          ${macroBar('פחמימות', t.carbs, g.carbs, 'var(--carb)')}
+          ${macroBar('שומן', t.fat, g.fat, 'var(--fat)')}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">💧 מים</div>
+        <div class="water-row">
+          <button class="round-btn" onclick="changeWater(-1)">−</button>
+          <div style="text-align:center">
+            <div class="water-glasses">${'🥛'.repeat(Math.min(water,12)) || '—'}</div>
+            <div class="muted" style="margin-top:4px">${water} / ${g.water} כוסות</div>
+          </div>
+          <button class="round-btn" onclick="changeWater(1)">+</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat" onclick="showPage('workouts')" style="cursor:pointer">
+          <div class="stat-num">${todayWk.length ? '✓' : '–'}</div>
+          <div class="stat-lbl">אימון היום</div>
+        </div>
+        <div class="stat" onclick="showPage('workouts')" style="cursor:pointer">
+          <div class="stat-num">${wkWeek}/${g.workoutsPerWeek}</div>
+          <div class="stat-lbl">אימונים השבוע</div>
+        </div>
+        <div class="stat" onclick="showPage('metrics')" style="cursor:pointer">
+          <div class="stat-num">${lastW!=null ? lastW : '–'}</div>
+          <div class="stat-lbl">משקל ${wChange!=null ? (wChange>0?'▲':wChange<0?'▼':'')+Math.abs(wChange).toFixed(1) : '(ק"ג)'}</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:6px">
+        <button class="btn btn-ghost" style="flex:1" onclick="openMealModal()">🍎 ארוחה</button>
+        <button class="btn btn-ghost" style="flex:1" onclick="openWorkoutModal()">🏋️ אימון</button>
+        <button class="btn btn-ghost" style="flex:1" onclick="openMetricModal()">⚖️ שקילה</button>
+      </div>`;
+  }
+  function macroBar(label, val, goal, color) {
+    const pct = goal ? Math.min(100, val/goal*100) : 0;
+    return `<div class="macro"><div class="macro-top"><span>${label}</span><span>${r0(val)} / ${r0(goal)} ג'</span></div>
+      <div class="bar"><i style="width:${pct}%;background:${color}"></i></div></div>`;
+  }
+  function changeWater(d) { setWater(todayStr(), Math.max(0, getWater(todayStr())+d)); refreshAll(); }
+
+  /* ============================================================
+     RENDER — NUTRITION
+     ============================================================ */
+  function changeNutDate(d) { const dt=parseD(nutritionDate); dt.setDate(dt.getDate()+d); nutritionDate = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); render('nutrition'); }
+  function renderNutrition() {
+    const g = getGoals(), t = dayTotals(nutritionDate);
+    const dayMeals = meals().filter(m => m.date === nutritionDate);
+    const TYPES = ['ארוחת בוקר','ארוחת צהריים','ארוחת ערב','נשנוש'];
+    let listHtml = '';
+    TYPES.forEach(type => {
+      const items = dayMeals.filter(m => m.type === type);
+      if (!items.length) return;
+      listHtml += `<div class="sec-label">${type}</div>`;
+      items.forEach(m => {
+        listHtml += `<div class="item" onclick="openMealModal('${m.id}')">
+          <div class="item-main"><div class="item-title">${esc(m.name)}</div>
+          <div class="item-sub">${r0(m.protein)}ח' · ${r0(m.carbs)}פ' · ${r0(m.fat)}ש'</div></div>
+          <div class="item-val">${r0(m.cal)}</div></div>`;
+      });
+    });
+    if (!dayMeals.length) listHtml = `<div class="empty">עדיין לא נרשמו ארוחות ביום הזה.<br>לחץ + כדי להוסיף 🍎</div>`;
+
+    el('page-nutrition').innerHTML = `
+      <div class="phead"><div><h2>תזונה</h2><p>מעקב ארוחות וקלוריות</p></div>
+        <button class="btn btn-primary btn-sm" onclick="openMealModal()">+ ארוחה</button></div>
+      <div class="datenav">
+        <button onclick="changeNutDate(-1)">›</button>
+        <div class="dlabel">${dateLabel(nutritionDate)}</div>
+        <button onclick="changeNutDate(1)">‹</button>
+      </div>
+      <div class="card">
+        <div class="card-title">סיכום יומי<span class="muted">${r0(t.cal)} / ${r0(g.cal)} קל'</span></div>
+        ${macroBar('חלבון', t.protein, g.protein, 'var(--accent)')}
+        ${macroBar('פחמימות', t.carbs, g.carbs, 'var(--carb)')}
+        ${macroBar('שומן', t.fat, g.fat, 'var(--fat)')}
+      </div>
+      <div class="card">${listHtml}</div>`;
+  }
+
+  /* ============================================================
+     RENDER — WORKOUTS
+     ============================================================ */
+  function renderWorkouts() {
+    const g = getGoals();
+    const all = workouts().slice().sort((a,b)=> a.date<b.date?1:-1);
+    const wkWeek = all.filter(w => inThisWeek(w.date)).length;
+    const pct = g.workoutsPerWeek ? Math.min(100, wkWeek/g.workoutsPerWeek*100) : 0;
+    let list = '';
+    if (!all.length) list = `<div class="empty">עדיין אין אימונים.<br>לחץ + כדי לתעד אימון 🏋️</div>`;
+    else all.forEach(w => {
+      const vol = (w.exercises||[]).reduce((s,e)=> s + (+e.sets||0)*(+e.reps||0)*(+e.weight||0), 0);
+      const chips = (w.exercises||[]).map(e => `<span class="chip">${esc(e.name)} ${e.sets||0}×${e.reps||0}${e.weight?(' · '+e.weight+'ק"ג'):''}</span>`).join('');
+      list += `<div class="item" style="display:block" onclick="openWorkoutModal('${w.id}')">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="item-title">${esc(w.name)}</div>
+          <div class="muted">${shortDate(w.date)}</div>
+        </div>
+        <div style="margin-top:6px">${chips || '<span class="muted">ללא תרגילים</span>'}</div>
+        <div class="item-sub" style="margin-top:7px">${(w.exercises||[]).length} תרגילים${w.duration?(' · '+w.duration+' דקות'):''}${vol?(' · נפח '+r0(vol)+' ק"ג'):''}</div>
+      </div>`;
+    });
+    el('page-workouts').innerHTML = `
+      <div class="phead"><div><h2>אימונים</h2><p>תיעוד והתקדמות</p></div>
+        <button class="btn btn-primary btn-sm" onclick="openWorkoutModal()">+ אימון</button></div>
+      <div class="card">
+        <div class="card-title">השבוע<span class="muted">${wkWeek} / ${g.workoutsPerWeek} אימונים</span></div>
+        <div class="bar"><i style="width:${pct}%;background:var(--accent)"></i></div>
+      </div>
+      <div class="card">${list}</div>`;
+  }
+
+  /* ============================================================
+     RENDER — METRICS
+     ============================================================ */
+  function renderMetrics() {
+    const g = getGoals();
+    const ms = metrics().slice().sort((a,b)=> a.date<b.date?-1:1);
+    const lastW = ms.length ? ms[ms.length-1].weight : null;
+    const firstW = ms.length ? ms[0].weight : null;
+    const totalChange = (lastW!=null && firstW!=null) ? (lastW-firstW) : null;
+    const spark = sparkline(ms.slice(-14).map(m=>m.weight));
+    let list = '';
+    const desc = ms.slice().reverse();
+    if (!desc.length) list = `<div class="empty">עדיין אין שקילות.<br>לחץ + כדי להוסיף ⚖️</div>`;
+    else desc.forEach((m,i) => {
+      const prev = desc[i+1];
+      const ch = prev ? (m.weight - prev.weight) : null;
+      list += `<div class="item" onclick="openMetricModal('${m.id}')">
+        <div class="item-main"><div class="item-title">${m.weight} ק"ג</div><div class="item-sub">${shortDate(m.date)}</div></div>
+        <div class="item-val" style="color:${ch>0?'var(--red)':ch<0?'var(--green)':'var(--text-muted)'}">${ch!=null?(ch>0?'+':'')+ch.toFixed(1):''}</div></div>`;
+    });
+
+    // water last 7 days
+    let waterBars = '';
+    for (let i=6; i>=0; i--) {
+      const d = new Date(); d.setDate(d.getDate()-i);
+      const ds = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      const n = getWater(ds), h = Math.min(100, g.water? n/g.water*100 : 0);
+      waterBars += `<div style="flex:1;text-align:center"><div style="height:60px;display:flex;align-items:flex-end;justify-content:center"><div style="width:60%;height:${h}%;min-height:3px;background:var(--accent);border-radius:5px"></div></div><div class="muted" style="font-size:10px;margin-top:4px">${d.toLocaleDateString('he-IL',{weekday:'short'})}</div></div>`;
+    }
+
+    el('page-metrics').innerHTML = `
+      <div class="phead"><div><h2>מדדים</h2><p>משקל ומעקב גוף</p></div>
+        <button class="btn btn-primary btn-sm" onclick="openMetricModal()">+ שקילה</button></div>
+      <div class="card">
+        <div class="card-title">משקל נוכחי
+          <span class="muted">${g.weight!=null?('יעד '+g.weight+' ק"ג'):''}</span></div>
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <div style="font-size:38px;font-weight:900">${lastW!=null?lastW:'–'}</div>
+          <div class="muted">ק"ג ${totalChange!=null?('· '+(totalChange>0?'+':'')+totalChange.toFixed(1)+' מההתחלה'):''}</div>
+        </div>
+        <div style="margin-top:14px">${spark}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">💧 מים — 7 ימים אחרונים</div>
+        <div style="display:flex;gap:6px;align-items:flex-end">${waterBars}</div>
+      </div>
+      <div class="card"><div class="card-title">היסטוריית שקילות</div>${list}</div>`;
+  }
+  function sparkline(values, w=300, h=70) {
+    if (!values || values.length<2) return '<div class="muted">צריך לפחות 2 שקילות לגרף</div>';
+    const min=Math.min(...values), max=Math.max(...values), range=(max-min)||1;
+    const pts = values.map((v,i)=>{ const x=(i/(values.length-1))*w; const y=h-((v-min)/range)*(h-14)-7; return x.toFixed(1)+','+y.toFixed(1); });
+    const last = pts[pts.length-1].split(',');
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none">
+      <polyline points="${pts.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${last[0]}" cy="${last[1]}" r="4" fill="var(--accent)"/></svg>`;
+  }
+
+  /* ============================================================
+     RENDER — SETTINGS
+     ============================================================ */
+  function renderSettings() {
+    const g = getGoals(), p = PEOPLE[currentPerson];
+    const isDark = document.documentElement.getAttribute('data-theme')==='dark';
+    el('page-settings').innerHTML = `
+      <div class="phead"><div><h2>הגדרות</h2><p>${p.name} ${p.emoji}</p></div></div>
+
+      <div class="card">
+        <div class="card-title">🎯 יעדים יומיים</div>
+        <div class="grid2">
+          <div><label>קלוריות</label><input id="g-cal" type="number" class="inp" value="${g.cal}"></div>
+          <div><label>חלבון (ג')</label><input id="g-protein" type="number" class="inp" value="${g.protein}"></div>
+          <div><label>פחמימות (ג')</label><input id="g-carbs" type="number" class="inp" value="${g.carbs}"></div>
+          <div><label>שומן (ג')</label><input id="g-fat" type="number" class="inp" value="${g.fat}"></div>
+          <div><label>כוסות מים</label><input id="g-water" type="number" class="inp" value="${g.water}"></div>
+          <div><label>אימונים בשבוע</label><input id="g-wpw" type="number" class="inp" value="${g.workoutsPerWeek}"></div>
+        </div>
+        <label>משקל יעד (ק"ג)</label><input id="g-weight" type="number" step="0.1" class="inp" value="${g.weight!=null?g.weight:''}" placeholder="לא הוגדר">
+        <button class="btn btn-primary btn-block" onclick="saveGoalsForm()">שמירת יעדים</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">⚙️ כללי</div>
+        <button class="btn btn-ghost btn-block" style="margin-bottom:10px" onclick="toggleTheme()">${isDark?'☀️ מצב יום':'🌙 מצב לילה'}</button>
+        <button class="btn btn-ghost btn-block" style="margin-bottom:10px" onclick="exportBackup()">📤 ייצוא גיבוי</button>
+        <label class="btn btn-ghost btn-block" style="margin-bottom:10px;text-align:center">📥 ייבוא גיבוי
+          <input type="file" accept=".json" onchange="importBackup(event)" style="display:none"></label>
+        ${firebaseReady?'<button class="btn btn-ghost btn-block" style="margin-bottom:10px" onclick="restoreFromAutoBackup()">♻️ שחזור מגיבוי ענן</button>':''}
+        <button class="btn btn-ghost btn-block" onclick="backToLobby()">↩ החלפת פרופיל</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">☁️ סטטוס</div>
+        <div class="muted" style="line-height:1.9">
+          ${CLOUD_CONFIGURED ? (firebaseReady ? '🟢 מחובר לענן — מסונכרן בין מכשירים' : '🟡 מתחבר לענן…') : '⚪ מצב מקומי — הנתונים נשמרים במכשיר הזה בלבד.<br>להפעלת סנכרון: צור פרויקט Firebase והדבק את הפרטים בקוד.'}
+          <br>גרסה ${localStorage.getItem('app_version')||'1'}
+        </div>
+      </div>`;
+  }
+  function saveGoalsForm() {
+    const num = (id,def) => { const v=parseFloat(el(id).value); return isNaN(v)?def:v; };
+    saveGoals({
+      cal: num('g-cal',DEFAULT_GOALS.cal), protein: num('g-protein',DEFAULT_GOALS.protein),
+      carbs: num('g-carbs',DEFAULT_GOALS.carbs), fat: num('g-fat',DEFAULT_GOALS.fat),
+      water: num('g-water',DEFAULT_GOALS.water), workoutsPerWeek: num('g-wpw',DEFAULT_GOALS.workoutsPerWeek),
+      weight: el('g-weight').value==='' ? null : num('g-weight',null)
+    });
+    toast('✓ היעדים נשמרו'); refreshAll();
+  }
+
+  /* ============================================================
+     MODALS — open / close + CRUD
+     ============================================================ */
+  function openModal(t) { el('modal-'+t).classList.add('open'); }
+  function closeModal(t) { el('modal-'+t).classList.remove('open'); }
+  document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e => { if (e.target===m) m.classList.remove('open'); }));
+
+  // ── Meal ──
+  function openMealModal(id) {
+    editingMealId = id || null;
+    const m = id ? meals().find(x=>x.id===id) : null;
+    el('meal-title').textContent = m ? 'עריכת ארוחה' : 'ארוחה חדשה';
+    el('meal-name').value = m?m.name:''; el('meal-type').value = m?m.type:'ארוחת בוקר';
+    el('meal-date').value = m?m.date:nutritionDate;
+    el('meal-cal').value = m?m.cal:''; el('meal-protein').value = m?(m.protein||''):'';
+    el('meal-carbs').value = m?(m.carbs||''):''; el('meal-fat').value = m?(m.fat||''):'';
+    el('meal-del').style.display = m?'block':'none';
+    openModal('meal');
+  }
+  function saveMeal() {
+    const name = el('meal-name').value.trim();
+    if (!name) { toast('צריך שם לארוחה'); return; }
+    const obj = { id: editingMealId||genId(), name, type: el('meal-type').value, date: el('meal-date').value||todayStr(),
+      cal:+el('meal-cal').value||0, protein:+el('meal-protein').value||0, carbs:+el('meal-carbs').value||0, fat:+el('meal-fat').value||0 };
+    const arr = meals(); const i = arr.findIndex(x=>x.id===obj.id);
+    if (i>=0) arr[i]=obj; else arr.push(obj);
+    save(pk('meals'), arr); closeModal('meal'); toast('✓ נשמר'); refreshAll();
+  }
+  function deleteMeal() { if (!editingMealId) return; if (!confirm('למחוק את הארוחה?')) return; save(pk('meals'), meals().filter(x=>x.id!==editingMealId)); closeModal('meal'); toast('נמחק'); refreshAll(); }
+
+  // ── Workout ──
+  function addExerciseRow(ex) {
+    const c = el('wk-exercises');
+    const div = document.createElement('div'); div.className = 'ex-row';
+    div.innerHTML = `<input class="inp ex-name" placeholder="תרגיל">
+      <input class="inp ex-sets" type="number" inputmode="numeric" placeholder="0">
+      <input class="inp ex-reps" type="number" inputmode="numeric" placeholder="0">
+      <input class="inp ex-weight" type="number" inputmode="decimal" placeholder="0">
+      <button class="ex-x" onclick="this.parentNode.remove()">✕</button>`;
+    c.appendChild(div);
+    if (ex) { div.querySelector('.ex-name').value=ex.name||''; div.querySelector('.ex-sets').value=ex.sets||''; div.querySelector('.ex-reps').value=ex.reps||''; div.querySelector('.ex-weight').value=ex.weight||''; }
+  }
+  function collectExercises() {
+    return [...document.querySelectorAll('#wk-exercises .ex-row')].map(r => ({
+      name: r.querySelector('.ex-name').value.trim(), sets:+r.querySelector('.ex-sets').value||0,
+      reps:+r.querySelector('.ex-reps').value||0, weight:+r.querySelector('.ex-weight').value||0
+    })).filter(e => e.name);
+  }
+  function openWorkoutModal(id) {
+    editingWk = id || null;
+    const w = id ? workouts().find(x=>x.id===id) : null;
+    el('wk-title').textContent = w?'עריכת אימון':'אימון חדש';
+    el('wk-name').value = w?w.name:''; el('wk-date').value = w?w.date:todayStr();
+    el('wk-duration').value = w?(w.duration||''):''; el('wk-notes').value = w?(w.notes||''):'';
+    el('wk-exercises').innerHTML = '';
+    if (w && w.exercises && w.exercises.length) w.exercises.forEach(addExerciseRow); else addExerciseRow();
+    el('wk-del').style.display = w?'block':'none';
+    openModal('workout');
+  }
+  function saveWorkout() {
+    const name = el('wk-name').value.trim();
+    if (!name) { toast('צריך שם לאימון'); return; }
+    const obj = { id: editingWk||genId(), name, date: el('wk-date').value||todayStr(),
+      duration:+el('wk-duration').value||0, notes: el('wk-notes').value.trim(), exercises: collectExercises() };
+    const arr = workouts(); const i = arr.findIndex(x=>x.id===obj.id);
+    if (i>=0) arr[i]=obj; else arr.push(obj);
+    save(pk('workouts'), arr); closeModal('workout'); toast('✓ נשמר'); refreshAll();
+  }
+  function deleteWorkout() { if (!editingWk) return; if (!confirm('למחוק את האימון?')) return; save(pk('workouts'), workouts().filter(x=>x.id!==editingWk)); closeModal('workout'); toast('נמחק'); refreshAll(); }
+
+  // ── Metric ──
+  function openMetricModal(id) {
+    editingMetric = id || null;
+    const m = id ? metrics().find(x=>x.id===id) : null;
+    el('mt-title').textContent = m?'עריכת שקילה':'שקילה חדשה';
+    el('mt-date').value = m?m.date:todayStr(); el('mt-weight').value = m?m.weight:'';
+    el('mt-del').style.display = m?'block':'none';
+    openModal('metric');
+  }
+  function saveMetric() {
+    const w = parseFloat(el('mt-weight').value);
+    if (!w) { toast('הכנס משקל'); return; }
+    const date = el('mt-date').value||todayStr(); const arr = metrics();
+    if (editingMetric) { const i=arr.findIndex(x=>x.id===editingMetric); if(i>=0){ arr[i].date=date; arr[i].weight=w; } }
+    else { const ex=arr.find(x=>x.date===date); if(ex) ex.weight=w; else arr.push({id:genId(),date,weight:w}); }
+    save(pk('metrics'), arr); closeModal('metric'); toast('✓ נשמר'); refreshAll();
+  }
+  function deleteMetric() { if (!editingMetric) return; if (!confirm('למחוק את השקילה?')) return; save(pk('metrics'), metrics().filter(x=>x.id!==editingMetric)); closeModal('metric'); toast('נמחק'); refreshAll(); }
+
+  /* ============================================================
+     BACKUP / EXPORT / IMPORT / RESTORE
+     ============================================================ */
+  function exportBackup() {
+    const data = _collectAll();
+    const blob = new Blob([JSON.stringify({ app:'fit-tracker', version:1, ts:Date.now(), data }, null, 2)], { type:'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'fit-backup-' + todayStr() + '.json'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast('📤 גיבוי יוצא');
+  }
+  function importBackup(e) {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        const data = parsed.data || parsed;
+        if (!confirm('לייבא גיבוי? זה יחליף את הנתונים הנוכחיים.')) return;
+        ALL_KEYS.forEach(k => { if (data[k]!==undefined) localStorage.setItem('s_'+k, JSON.stringify(data[k])); });
+        pushAllToCloud(); refreshAll(); toast('✅ הגיבוי יובא');
+      } catch(err) { toast('❌ קובץ לא תקין'); }
+    };
+    reader.readAsText(file); e.target.value = '';
+  }
+  function restoreFromAutoBackup() {
+    if (!firebaseDB) { toast('❌ אין חיבור לענן'); return; }
+    toast('טוען גיבויים…');
+    firebaseDB.ref('app_backups').once('value').then(snap => {
+      const all = snap.val() || {}, dates = Object.keys(all).sort().reverse();
+      if (!dates.length) { toast('אין עדיין גיבויים'); return; }
+      const choice = prompt('בחר מספר גיבוי לשחזור:\n\n' + dates.map((d,i)=>(i+1)+'. '+d).join('\n'));
+      if (!choice) return;
+      const idx = parseInt(choice,10)-1;
+      if (isNaN(idx)||idx<0||idx>=dates.length) { toast('בחירה לא תקינה'); return; }
+      const backup = all[dates[idx]];
+      if (!backup || !backup.data) { toast('גיבוי לא תקין'); return; }
+      if (!confirm('לשחזר את הגיבוי מ-'+dates[idx]+'?')) return;
+      ALL_KEYS.forEach(k => { if (backup.data[k]!==undefined) localStorage.setItem('s_'+k, JSON.stringify(backup.data[k])); });
+      pushAllToCloud(); refreshAll(); toast('✅ שוחזר מ-'+dates[idx]);
+    }).catch(() => toast('❌ שגיאה'));
+  }
+
+  /* ============================================================
+     THEME
+     ============================================================ */
+  function applyTheme() {
+    const t = localStorage.getItem('fit_theme') || 'light';
+    document.documentElement.setAttribute('data-theme', t);
+    const mc = document.querySelector('meta[name=theme-color]');
+    if (mc) mc.setAttribute('content', t==='dark' ? '#0f172a' : '#f1f5f9');
+  }
+  function toggleTheme() {
+    const next = document.documentElement.getAttribute('data-theme')==='dark' ? 'light' : 'dark';
+    localStorage.setItem('fit_theme', next); applyTheme(); refreshAll();
+  }
+
+  /* ============================================================
+     PWA — service worker + install + auto-update
+     ============================================================ */
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      reg.update();
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        nw && nw.addEventListener('statechange', () => { if (nw.state==='activated') location.reload(); });
+      });
+    }).catch(()=>{});
+  }
+
+  let _deferredInstall = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); _deferredInstall = e; });
+  const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true;
+  const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  function maybeShowInstallBanner() {
+    if (isStandalone() || localStorage.getItem('install_dismissed')==='yes') return;
+    const banner = el('install-banner');
+    if (_deferredInstall) { el('ib-sub').textContent='הוסף למסך הבית'; el('install-btn').textContent='התקן'; }
+    else if (isIOS()) { el('ib-sub').textContent='שתף ← הוסף למסך הבית'; el('install-btn').textContent='איך?'; }
+    else return;
+    banner.style.display = 'flex';
+  }
+  async function triggerInstall() {
+    if (_deferredInstall) { _deferredInstall.prompt(); await _deferredInstall.userChoice; _deferredInstall=null; dismissInstallBanner(); }
+    else if (isIOS()) openModal('ios');
+  }
+  function dismissInstallBanner() { localStorage.setItem('install_dismissed','yes'); el('install-banner').style.display='none'; }
+  window.addEventListener('load', () => { if (window.innerWidth<=768) setTimeout(maybeShowInstallBanner, 3000); });
+
+  (function checkVersion() {
+    const params = new URLSearchParams(location.search);
+    if (params.get('_v')) { localStorage.setItem('app_version', params.get('_v')); history.replaceState(null,'',location.pathname); return; }
+    fetch('version.txt?t=' + Date.now()).then(r=>r.text()).then(sv => {
+      const v = sv.trim(), local = localStorage.getItem('app_version');
+      if (local && local!==v) location.replace(location.pathname + '?_v=' + v);
+      else localStorage.setItem('app_version', v);
+    }).catch(()=>{});
+  })();
+
+  /* ============================================================
+     BOOT
+     ============================================================ */
+  applyTheme();
+  buildNav();
+  el('ver-side').textContent = localStorage.getItem('app_version') || '1';
+  if (localStorage.getItem('fit_authed')==='1') showLobby(); else el('login-screen').classList.remove('hidden');
+
+  initFirebase().then(() => { refreshAll(); el('ver-side').textContent = localStorage.getItem('app_version')||'1'; });
+
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState==='visible') _syncFromCloud('חזרה'); });
+  setInterval(() => { if (document.visibilityState==='visible') _syncFromCloud('תקופתי'); }, 3*60*1000);
+  setInterval(() => { if (document.visibilityState==='visible' && Object.keys(_pending).length) flushPending(); }, 20*1000);
+  </script>
+</body>
+</html>
