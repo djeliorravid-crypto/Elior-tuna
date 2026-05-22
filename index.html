@@ -701,7 +701,9 @@
     el('side-name').textContent = p.name;
     nutritionDate = todayStr();
     showPage('dashboard');
-    if (!getGoals().onboarded) setTimeout(openOnboarding, 450);
+    const _g = getGoals();
+    const degenerate = _g.plan && _g.plan.direction!=='maintain' && !(_g.plan.pace>0);
+    if (!_g.onboarded || degenerate) setTimeout(openOnboarding, 450);
   }
   function backToLobby() { currentPerson = null; showLobby(); }
 
@@ -1158,17 +1160,6 @@
     { f:1.725, label:'גבוה',      desc:'אימון 6–7 בשבוע' },
     { f:1.9,   label:'אינטנסיבי', desc:'עבודה פיזית / ספורט יומי' },
   ];
-  const PACES_LOSE = [
-    { v:0.25, label:'רגוע',    desc:'¼ ק"ג בשבוע · קל לשמירה' },
-    { v:0.5,  label:'מאוזן',   desc:'½ ק"ג בשבוע · מומלץ' },
-    { v:0.75, label:'מהיר',    desc:'¾ ק"ג בשבוע' },
-    { v:1.0,  label:'אגרסיבי', desc:'1 ק"ג בשבוע · דורש משמעת' },
-  ];
-  const PACES_GAIN = [
-    { v:0.125, label:'עדין',  desc:'~½ ק"ג בחודש · מסה נקייה' },
-    { v:0.25,  label:'מאוזן', desc:'¼ ק"ג בשבוע · מומלץ' },
-    { v:0.5,   label:'מהיר',  desc:'½ ק"ג בשבוע' },
-  ];
 
   function calcBMR(gender, w, h, age) { const b = 10*w + 6.25*h - 5*age; return Math.round(gender==='female' ? b-161 : b+5); }
   function bmiInfo(w, h) {
@@ -1207,10 +1198,25 @@
     }
     return { cal, protein, carbs, fat, water, bmr, tdee, direction, pace, weeks, totalKg, goalDateISO: isoDate(gd), proj };
   }
+  // Generate several distinct plan options at different paces, with timeframes
+  function planOptions(base) {
+    const diff = base.goalWeight - base.startWeight;
+    if (Math.abs(diff) < 0.5) return [];
+    const paces = diff<0 ? [0.25,0.5,0.75,1.0] : [0.125,0.25,0.5];
+    const seen = new Set(), opts = [];
+    paces.forEach(pc => {
+      const plan = buildPlan(Object.assign({}, base, { pace:pc }));
+      if (plan.weeks <= 0) return;
+      const key = plan.weeks + '_' + plan.cal;
+      if (seen.has(key)) return; seen.add(key);
+      opts.push(Object.assign({ reqPace:pc }, plan));
+    });
+    return opts;
+  }
 
   // ── Onboarding wizard ──
   let _ob = {};
-  const OB_STEPS = ['welcome','gender','age','height','weight','activity','goal','pace','summary'];
+  const OB_STEPS = ['welcome','gender','age','height','weight','activity','goal','plan','summary'];
   function openOnboarding(prefill) {
     const g = getGoals();
     _ob = Object.assign({ step:0, gender:null, age:'', height:'', startWeight:'', activity:null, goalWeight:'', pace:null },
@@ -1243,12 +1249,26 @@
         `<div class="ob-choices">${ACTIVITY.map(a=>obChoice('activity',a.f,'',a.label,a.desc)).join('')}</div>`, back, false);
     } else if (key==='goal') {
       body.innerHTML = obWrap('מה משקל היעד?', 'כמה היית רוצה לשקול', obNum('goalWeight','ק"ג'), back, true);
-    } else if (key==='pace') {
-      const diff = (+_ob.goalWeight) - (+_ob.startWeight);
+    } else if (key==='plan') {
+      const base = { gender:_ob.gender, age:+_ob.age, height:+_ob.height, startWeight:+_ob.startWeight, activity:+_ob.activity, goalWeight:+_ob.goalWeight };
+      const diff = base.goalWeight - base.startWeight;
       if (Math.abs(diff) < 0.5) { _ob.pace = 0; _ob.step++; return obRender(); }
-      const paces = diff<0 ? PACES_LOSE : PACES_GAIN;
-      body.innerHTML = obWrap(diff<0?'באיזה קצב לרדת?':'באיזה קצב לעלות?', 'קצב מאוזן הכי בריא וקל לשמירה',
-        `<div class="ob-choices">${paces.map(pc=>obChoice('pace',pc.v,'',pc.label,pc.desc)).join('')}</div>`, back, false);
+      const lose = diff<0;
+      const opts = planOptions(base); _ob._opts = opts;
+      let inner;
+      if (!opts.length) {
+        inner = `<div class="ob-sub" style="color:var(--red)">לא ניתן לבנות תוכנית בטוחה עם הנתונים האלה.<br>בדוק שהגובה הוזן בס"מ והמשקל בק"ג.</div>`;
+      } else {
+        inner = `<div class="ob-choices">${opts.map((o,idx)=>{
+          const months = o.weeks/4.345;
+          const tf = o.weeks<=8 ? ('כ-'+o.weeks+' שבועות') : ('כ-'+(Math.round(months*10)/10).toString().replace('.0','')+' חודשים');
+          const rec = ((lose && o.reqPace===0.5)||(!lose && o.reqPace===0.25)) ? ' · מומלץ ⭐' : '';
+          return `<div class="ob-choice" onclick="obPickPlan(${idx})"><div style="flex:1">
+            <div class="t">${tf}${rec}</div>
+            <div class="d">${o.pace} ק"ג/שבוע · ${nf(o.cal)} קל'/יום · עד ${shortDate(o.goalDateISO)}</div></div></div>`;
+        }).join('')}</div>`;
+      }
+      body.innerHTML = obWrap(lose?'בחר תוכנית ירידה':'בחר תוכנית עלייה', 'כמה זמן ייקח להגיע ל-'+base.goalWeight+' ק"ג? בחר את הקצב שמתאים לך', inner, back, false);
     } else if (key==='summary') {
       const plan = buildPlan({ gender:_ob.gender, age:+_ob.age, height:+_ob.height, startWeight:+_ob.startWeight, activity:+_ob.activity, goalWeight:+_ob.goalWeight, pace:+_ob.pace });
       _ob.plan = plan;
@@ -1282,10 +1302,11 @@
     return `<div class="ob-choice${sel}" onclick="obPick('${key}',${v})">${emoji?`<span class="e">${emoji}</span>`:''}<div style="flex:1"><div class="t">${t}</div>${d?`<div class="d">${d}</div>`:''}</div></div>`;
   }
   function obPick(key, val) { _ob[key] = val; setTimeout(obNext, 150); }
+  function obPickPlan(idx) { const o = _ob._opts && _ob._opts[idx]; if (!o) return; _ob.pace = o.pace; setTimeout(obNext, 150); }
   function obNext() {
     const key = OB_STEPS[_ob.step];
-    const map = { age:'age', height:'height', weight:'startWeight', goal:'goalWeight' };
-    if (map[key]) { const v = parseFloat(_ob[map[key]]); if (!v || v<=0) { toast('נא להזין ערך'); return; } }
+    const map = { age:['age',10,100,'גיל'], height:['height',120,250,'גובה בס"מ'], weight:['startWeight',30,400,'משקל'], goal:['goalWeight',30,400,'משקל יעד'] };
+    if (map[key]) { const [f,min,max,lbl] = map[key]; const v = parseFloat(_ob[f]); if (!v) { toast('נא להזין '+lbl); return; } if (v<min||v>max) { toast(lbl+' לא תקין'); return; } }
     if (_ob.step < OB_STEPS.length-1) { _ob.step++; obRender(); }
   }
   function obBack() { if (_ob.step>0) { _ob.step--; obRender(); } }
