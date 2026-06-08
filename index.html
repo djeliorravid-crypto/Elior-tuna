@@ -309,6 +309,16 @@
     .ins-emoji { font-size:25px; flex:0 0 auto; line-height:1.2; }
     .ins-msg { font-weight:700; font-size:14px; line-height:1.55; }
     .ins-tip { margin-top:13px; padding-top:13px; border-top:1px solid var(--border); font-size:13px; color:var(--text-muted); line-height:1.65; }
+
+    /* ===== METHODOLOGY (the science behind the plan) ===== */
+    .methodology { background:var(--surface2); border:1px solid var(--border); border-radius:16px; padding:14px 16px; margin:14px 0; }
+    .meth-title { font-size:14px; font-weight:900; color:var(--accent); margin-bottom:8px; text-align:center; }
+    .meth-section { padding:11px 0; border-bottom:1px dashed var(--border); }
+    .meth-section:last-child { border-bottom:none; }
+    .meth-label { font-size:12.5px; font-weight:800; color:var(--text-muted); margin-bottom:6px; }
+    .meth-formula { font-size:13.5px; font-weight:600; margin:3px 0; line-height:1.7; unicode-bidi:plaintext; }
+    .meth-formula b { font-weight:900; color:var(--accent); }
+    .meth-cite { font-size:11.5px; color:var(--text-muted); margin-top:6px; line-height:1.55; font-style:italic; }
   </style>
 </head>
 <body>
@@ -822,6 +832,7 @@
   function motivationText() {
     const g = getGoals(), p = PEOPLE[currentPerson];
     if (!g.plan || g.plan.direction==='maintain') return `${greeting()}, ${p.name} ${p.emoji}`;
+    if (parseD(todayStr()) < parseD(g.plan.startDate)) return `${p.name}, התוכנית שלך מוכנה 🚀 מתחילים מחר!`;
     const ms = metrics().slice().sort((a,b)=> a.date<b.date?-1:1);
     const cur = ms.length ? ms[ms.length-1].weight : g.plan.startWeight;
     const lose = g.plan.direction==='lose';
@@ -1182,7 +1193,8 @@
         <label class="btn btn-ghost btn-block" style="margin-bottom:10px;text-align:center">📥 ייבוא גיבוי
           <input type="file" accept=".json" onchange="importBackup(event)" style="display:none"></label>
         ${firebaseReady?'<button class="btn btn-ghost btn-block" style="margin-bottom:10px" onclick="restoreFromAutoBackup()">♻️ שחזור מגיבוי ענן</button>':''}
-        <button class="btn btn-ghost btn-block" onclick="backToLobby()">↩ החלפת פרופיל</button>
+        <button class="btn btn-ghost btn-block" style="margin-bottom:10px" onclick="backToLobby()">↩ החלפת פרופיל</button>
+        <button class="btn btn-danger-ghost btn-block" onclick="startFreshJourney()">🔄 התחל מסע חדש</button>
       </div>
 
       <div class="card">
@@ -1402,6 +1414,56 @@
     return opts;
   }
 
+  // ── Methodology block: shows the formulas applied to the user's actual numbers
+  function methodologyHtml(profile, plan) {
+    const w = profile.startWeight, h = profile.height, age = profile.age, gender = profile.gender;
+    const bmr = plan.bmr, base = Math.round(bmr*1.2), pace = plan.pace || 0;
+    const dailyDeficit = Math.round(pace*1100);
+    const floor = gender==='female' ? 1200 : 1500;
+    const refW = plan.direction==='gain' ? profile.goalWeight : profile.startWeight;
+    return `<div class="methodology">
+      <div class="meth-title">📚 המדע מאחורי התוכנית שלך</div>
+      <div class="meth-section">
+        <div class="meth-label">🔬 חילוף חומרים במנוחה (BMR)</div>
+        <div class="meth-formula">10×${w} + 6.25×${h} − 5×${age} ${gender==='female'?'− 161':'+ 5'} = <b>${nf(bmr)} קל'</b></div>
+        <div class="meth-cite">נוסחת Mifflin-St Jeor — תקן הזהב במחקר התזונה הקליני</div>
+      </div>
+      <div class="meth-section">
+        <div class="meth-label">🔋 תחזוקה בסיסית</div>
+        <div class="meth-formula">${nf(bmr)} × 1.2 = <b>${nf(base)} קל'</b></div>
+        <div class="meth-cite">שמירת משקל ביום ללא תנועה. כל צעד ואימון מתווסף לזה.</div>
+      </div>
+      ${pace > 0 ? `<div class="meth-section">
+        <div class="meth-label">⚡ גירעון יומי לקצב ${pace} ק"ג/שבוע</div>
+        <div class="meth-formula">${pace} × 7,700 ÷ 7 = <b>${nf(dailyDeficit)} קל'</b></div>
+        <div class="meth-cite">7,700 קק"ל ≈ אנרגיה של ק"ג שומן — מקובל ומבוסס מחקר</div>
+      </div>
+      <div class="meth-section">
+        <div class="meth-label">🎯 יעד הקלוריות הבסיסי שלך</div>
+        <div class="meth-formula">${nf(base)} − ${nf(dailyDeficit)} = <b>${nf(plan.cal)} קל' ביום</b></div>
+        <div class="meth-cite">לעולם לא מתחת ל-${nf(floor)} קל' — רצפת בטיחות לתפקוד הורמונלי</div>
+      </div>` : ''}
+      <div class="meth-section">
+        <div class="meth-label">🥩 חלוקת מאקרו מותאמת לדיאטה</div>
+        <div class="meth-formula"><b>חלבון</b> 1.8 ג'/ק"ג × ${refW} = <b>${plan.protein} ג'</b></div>
+        <div class="meth-formula"><b>שומן</b> 25% מהקלוריות = <b>${plan.fat} ג'</b></div>
+        <div class="meth-formula"><b>פחמימות</b> מהיתרה = <b>${plan.carbs} ג'</b></div>
+        <div class="meth-cite">חלבון לפי המלצת ה-ISSN לשמירה על שריר; שומן מעל מינימום הורמונלי בריא</div>
+      </div>
+    </div>`;
+  }
+
+  // ── Start fresh journey: wipes the current profile's data and re-onboards
+  function startFreshJourney() {
+    if (!currentPerson) return;
+    if (!confirm('להתחיל מסע חדש?\n\nהפעולה תמחק את כל הנתונים שלך (ארוחות, שקילות, צעדים, תמונות, תוכנית) ותפתח אשף ליצירת תוכנית חדשה מותאמת אישית.\n\nהתוכנית החדשה תתחיל מחר.')) return;
+    if (confirm('להוריד גיבוי של הנתונים הנוכחיים לפני המחיקה?')) { try { exportBackup(); } catch(e){} }
+    DATA_TYPES.forEach(t => save(pk(t), []));
+    save(pk('goals'), {});
+    toast('🚀 בוא נבנה תוכנית חדשה');
+    setTimeout(() => { closeModal('plan'); openOnboarding(); }, 300);
+  }
+
   // ── Dynamic daily budget (earn-from-movement model) + adaptive calibration ──
   const STEP_KCAL = 0.0005; // gross kcal per step per kg
   const STEP_BASELINE = 4000; // incidental steps already included in the sedentary base
@@ -1542,8 +1604,11 @@
       _ob.plan = plan;
       const bi = bmiInfo(+_ob.startWeight, +_ob.height);
       const dirTxt = plan.direction==='lose'?'ירידה':plan.direction==='gain'?'עלייה':'שמירה';
+      const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
+      const profile = { gender:_ob.gender, age:+_ob.age, height:+_ob.height, startWeight:+_ob.startWeight, goalWeight:+_ob.goalWeight };
       body.innerHTML = `<div class="ob-step">
-        <div class="ob-emoji">✨</div><div class="ob-title">התוכנית שלך מוכנה</div>
+        <div class="ob-emoji">✨</div><div class="ob-title">התוכנית האישית שלך מוכנה</div>
+        <div class="ob-sub" style="margin-bottom:14px">📅 המסע מתחיל <b>מחר, ${fullDate(isoDate(tomorrow))}</b></div>
         <div class="ob-result"><div class="ob-sub" style="margin:0 0 4px">יעד קלוריות בסיס ליום</div><div class="ob-bignum">${nf(plan.cal)}</div>
           <div class="muted" style="text-align:center;margin-top:6px">+ קלוריות על כל צעד ואימון שתתעד 💪</div></div>
         <div class="ob-result">
@@ -1553,7 +1618,8 @@
           ${plan.direction!=='maintain' ? `<div class="ob-stat-row"><span>${dirTxt} של ${plan.totalKg} ק"ג</span><b>${plan.pace} ק"ג/שבוע</b></div>
           <div class="ob-stat-row"><span>תאריך יעד משוער</span><b>${fullDate(plan.goalDateISO)}</b></div>` : ''}
         </div>
-        <button class="btn btn-primary btn-block" onclick="obFinish()">מעולה, בוא נתחיל 🚀</button>
+        ${methodologyHtml(profile, plan)}
+        <button class="btn btn-primary btn-block" onclick="obFinish()">מעולה, יוצאים לדרך 🚀</button>
         <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="obBack()">חזרה</button></div>`;
     }
   }
@@ -1581,14 +1647,16 @@
   function obSkip() { const g = getGoals(); g.onboarded = true; saveGoals(g); closeModal('onboard'); refreshAll(); }
   function obFinish() {
     const plan = _ob.plan, g = getGoals();
+    const startD = new Date(); startD.setDate(startD.getDate()+1);
+    const startISO = isoDate(startD);
     g.cal = plan.cal; g.protein = plan.protein; g.carbs = plan.carbs; g.fat = plan.fat; g.water = plan.water;
     g.weight = +_ob.goalWeight; g.onboarded = true;
     g.plan = { gender:_ob.gender, age:+_ob.age, height:+_ob.height, activity:+_ob.activity,
-      startWeight:+_ob.startWeight, startDate:todayStr(), goalWeight:+_ob.goalWeight,
+      startWeight:+_ob.startWeight, startDate:startISO, goalWeight:+_ob.goalWeight,
       pace:plan.pace, direction:plan.direction, tdee:plan.tdee, bmr:plan.bmr, calib:1, eatBack:0.5, goalDate:plan.goalDateISO, createdAt:Date.now() };
     saveGoals(g);
-    const ms = metrics(); if (!ms.find(x=>x.date===todayStr())) { ms.push({ id:genId(), date:todayStr(), weight:+_ob.startWeight }); save(pk('metrics'), ms); }
-    closeModal('onboard'); toast('🎯 התוכנית נשמרה'); refreshAll();
+    const ms = metrics(); if (!ms.find(x=>x.date===startISO)) { ms.push({ id:genId(), date:startISO, weight:+_ob.startWeight }); save(pk('metrics'), ms); }
+    closeModal('onboard'); toast('🚀 התוכנית מוכנה — נתראה מחר!'); refreshAll();
   }
 
   // ── Plan card + projection modal ──
@@ -1599,12 +1667,21 @@
     const cur = ms.length ? ms[ms.length-1].weight : pl.startWeight;
     const plan = buildPlan({ gender:pl.gender, age:pl.age, height:pl.height, startWeight:cur, activity:pl.activity, goalWeight:pl.goalWeight, pace:pl.pace });
     const lose = pl.direction==='lose';
+    const todayD = parseD(todayStr()), startD = parseD(pl.startDate);
+    if (todayD < startD) {
+      const daysTo = Math.round((startD - todayD)/86400000);
+      const headline = daysTo===1 ? 'מתחיל מחר! 🌅' : `מתחיל בעוד ${daysTo} ימים`;
+      return `<div class="journey-card" onclick="openPlanModal()">
+        <div class="jc-top"><span class="jc-title">🚀 המסע מתחיל</span><span class="jc-status">${shortDate(pl.startDate)} ›</span></div>
+        <div class="jc-big">${headline}</div>
+        <div class="jc-meta">${pl.startWeight} ק"ג → ${pl.goalWeight} ק"ג · ${plan.weeks} שבועות · יעד ${shortDate(plan.goalDateISO)}</div></div>`;
+    }
     const total = Math.abs(pl.startWeight - pl.goalWeight) || 1;
     const done = lose ? (pl.startWeight - cur) : (cur - pl.startWeight);
     const pct = Math.max(0, Math.min(100, done/total*100));
     const left = Math.max(0, Math.round(Math.abs(cur - pl.goalWeight)*10)/10);
     const trend = weeklyTrend();
-    const elapsedW = Math.max(0, (parseD(todayStr()) - parseD(pl.startDate)) / 604800000);
+    const elapsedW = Math.max(0, (todayD - startD) / 604800000);
     const expected = lose ? pl.startWeight - pl.pace*elapsedW : pl.startWeight + pl.pace*elapsedW;
     let status;
     if (Math.abs(cur - pl.goalWeight) < 0.3) status = 'הגעת ליעד! 🎉';
@@ -1642,14 +1719,8 @@
       <div class="ob-result"><div class="ob-sub" style="margin:0 0 4px">יעד קלוריות בסיס ליום</div><div class="ob-bignum">${nf(b.core)}</div>
         <div class="muted" style="text-align:center;margin-top:4px">+ קלוריות על כל צעד ואימון שתתעד</div></div>
 
-      <div class="card-title" style="margin-bottom:8px">איך חישבנו 🧮</div>
-      <div class="ob-result">
-        <div class="ob-stat-row"><span>חילוף חומרים במנוחה (BMR)</span><b>${nf(bmrNow)} קל'</b></div>
-        <div class="ob-stat-row"><span>תחזוקה בסיסית (×1.2${pl.calib&&pl.calib!==1?` · כיול ${calibPct>0?'+':''}${calibPct}%`:''})</span><b>${nf(b.maintenance)} קל'</b></div>
-        <div class="ob-stat-row"><span>${pl.direction==='gain'?'עודף לעלייה':'גירעון לירידה'}</span><b>${pl.direction==='gain'?'+':'−'}${nf(Math.abs(b.deficit))} קל'</b></div>
-        <div class="ob-stat-row"><span>= יעד בסיס ליום</span><b>${nf(b.core)} קל'</b></div>
-      </div>
-      <div class="muted" style="line-height:1.7;margin-bottom:12px">המספר משקף יום ללא תנועה. כל צעד ואימון שתתעד מוסיפים קלוריות שמותר לאכול — ככה היעד תמיד אמיתי ולא מעניש אותך על פעילות.</div>
+      ${methodologyHtml({ gender:pl.gender, age:pl.age, height:pl.height, startWeight:cur, goalWeight:pl.goalWeight }, { bmr:bmrNow, pace:pl.pace, direction:pl.direction, cal:b.core, protein:g.protein, carbs:g.carbs, fat:g.fat })}
+      ${pl.calib && pl.calib!==1 ? `<div class="muted" style="line-height:1.7;margin-bottom:12px;text-align:center">🔧 כיול אישי: ${calibPct>0?'+':''}${calibPct}% — חילוף החומרים האמיתי שלך, נלמד מהתוצאות.</div>` : ''}
 
       ${plan.direction!=='maintain' ? `<div class="card-title" style="margin-bottom:8px">תחזית משקל ${pl.direction==='lose'?'📉':'📈'}</div>
       <div style="margin-bottom:10px">${spark}</div>
