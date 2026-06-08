@@ -44,6 +44,15 @@
       --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.35);
       --shadow-lg:0 14px 36px rgba(0,0,0,.55);
     }
+    /* Hadar — cream theme */
+    html[data-person="hadar"] {
+      --bg:#F8F0E0; --surface:#FFFAF0; --surface2:#F1E7D2; --surface3:#E5D8BC;
+      --border:#E0D2B5; --text:#4A3A26; --text-muted:#877152;
+    }
+    html[data-person="hadar"][data-theme="dark"] {
+      --bg:#2D2519; --surface:#3D3322; --surface2:#4E412C; --surface3:#5E5036;
+      --border:#5E5036; --text:#F5E8D0; --text-muted:#BCAB85;
+    }
 
     * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
     html, body { height:100%; }
@@ -482,6 +491,7 @@
     </div>
   </div>
   <input type="file" id="photo-input" accept="image/*" onchange="addPhoto(event)" style="display:none">
+  <input type="file" id="ai-photo-input" accept="image/*" capture="environment" onchange="aiAnalyzePhoto(event)" style="display:none">
 
   <!-- ===== INSTALL BANNER ===== -->
   <div class="install-banner" id="install-banner">
@@ -508,7 +518,7 @@
   const PASS = '110';            // סיסמת כניסה — שנה כאן אם תרצה
 
   const PEOPLE = {
-    hadar: { name:'הדר',    emoji:'🌸', accent:'#ec4899', accent2:'#f472b6', soft:'rgba(236,72,153,0.13)', grad:'linear-gradient(140deg,#ec4899,#a855f7)' },
+    hadar: { name:'הדר',    emoji:'🌸', accent:'#B8855A', accent2:'#D4A874', soft:'rgba(184,133,90,0.15)', grad:'linear-gradient(140deg,#D4A874,#8B6B43)' },
     elior: { name:'אליאור', emoji:'💪', accent:'#0ea5e9', accent2:'#22d3ee', soft:'rgba(14,165,233,0.13)', grad:'linear-gradient(140deg,#0ea5e9,#14b8a6)' }
   };
 
@@ -733,6 +743,7 @@
   function logout() { localStorage.removeItem('fit_authed'); el('lobby-screen').classList.add('hidden'); el('app').classList.add('hidden'); el('login-screen').classList.remove('hidden'); }
 
   function showLobby() {
+    document.documentElement.removeAttribute('data-person');
     el('login-screen').classList.add('hidden');
     el('app').classList.add('hidden');
     el('lobby-screen').classList.remove('hidden');
@@ -751,6 +762,13 @@
     r.setProperty('--accent', p.accent);
     r.setProperty('--accent2', p.accent2);
     r.setProperty('--accent-soft', p.soft);
+    document.documentElement.setAttribute('data-person', id);
+    const mc = document.querySelector('meta[name=theme-color]');
+    if (mc) {
+      const dark = document.documentElement.getAttribute('data-theme')==='dark';
+      const themed = { hadar: dark?'#2D2519':'#F8F0E0', elior: dark?'#0f172a':'#f1f5f9' };
+      mc.setAttribute('content', themed[id] || (dark?'#0f172a':'#f1f5f9'));
+    }
   }
 
   function enterPerson(id) {
@@ -971,6 +989,7 @@
         <div class="card-title">🤖 עוזר תזונה חכם</div>
         <textarea id="ai-food-input" class="inp" rows="2" placeholder="כתוב מה אכלת… למשל: 200 גרם חזה עוף, צלחת אורז וביצה קשה"></textarea>
         <button class="btn btn-primary btn-block" id="ai-food-btn" onclick="aiAnalyzeFood()">חשב ערכים עם AI ✨</button>
+        <button class="btn btn-ghost btn-block" id="ai-photo-btn" style="margin-top:8px" onclick="document.getElementById('ai-photo-input').click()">📸 צלם מוצר / תווית</button>
         <div id="ai-food-result"></div>
       </div>
       <div class="card">
@@ -1043,6 +1062,49 @@
         cal:+it.cal||0, protein:+it.protein||0, carbs:+it.carbs||0, fat:+it.fat||0 });
     });
     save(pk('meals'), arr); _aiFood = null; toast('✓ נוסף ליומן'); refreshAll();
+  }
+  // Resize and compress an image File to a data URI (used by AI photo analysis)
+  function resizeImageFile(file, max, quality) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          let w = img.width, h = img.height;
+          if (w > h && w > max) { h = Math.round(h*max/w); w = max; }
+          else if (h > max) { w = Math.round(w*max/h); h = max; }
+          const c = document.createElement('canvas'); c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(c.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => reject(new Error('image'));
+        img.src = reader.result;
+      };
+      reader.onerror = () => reject(new Error('read'));
+      reader.readAsDataURL(file);
+    });
+  }
+  async function aiAnalyzePhoto(e) {
+    const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+    const res = el('ai-food-result'), btn = el('ai-food-btn'), pbtn = el('ai-photo-btn');
+    if (typeof puter === 'undefined' || !puter.ai || !puter.ai.chat) {
+      res.innerHTML = `<div class="muted" style="text-align:center;padding:10px">ה-AI לא נטען (אולי אין חיבור). <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openMealModal()">הוספה ידנית</button></div>`;
+      return;
+    }
+    if (btn) btn.disabled = true; if (pbtn) pbtn.disabled = true;
+    res.innerHTML = '<div class="muted" style="text-align:center;padding:14px">קורא את התמונה ומחשב ערכים… 📸</div>';
+    let dataUri;
+    try { dataUri = await resizeImageFile(file, 1024, 0.7); }
+    catch(err) { res.innerHTML = `<div class="muted" style="text-align:center;padding:10px">לא הצלחתי לקרוא את התמונה</div>`; if (btn) btn.disabled=false; if (pbtn) pbtn.disabled=false; return; }
+    const prompt = `אתה מומחה תזונה. בתמונה מוצר מזון. אם זו אריזה עם תווית ערכים — קרא את התווית והחזר את הערכים לפי גודל מנה הגיוני (או כל האריזה אם הכמות ברורה ונראה שכך נצרך). אם זה מוצר טבעי (פרי, ירק, בשר, ביצה וכו') — זהה והערך לפי גודל סביר של פריט יחיד. החזר אך ורק JSON תקין, בלי טקסט נוסף ובלי markdown, במבנה: {"items":[{"name":"שם בעברית","amount":"כמות","cal":מספר,"protein":מספר,"carbs":מספר,"fat":מספר}],"meal":"ארוחת בוקר|ארוחת צהריים|ארוחת ערב|נשנוש"} כל הערכים מספרים שלמים (קלוריות וגרמים). אם לא בטוח — תן הערכה סבירה.`;
+    try {
+      const resp = await puter.ai.chat(prompt, dataUri, false, { model:'gpt-4o-mini' });
+      const data = extractJson(aiPuterText(resp));
+      if (!data || !Array.isArray(data.items) || !data.items.length) throw new Error('parse');
+      _aiFood = data; renderAiResult(data);
+    } catch(err) {
+      res.innerHTML = `<div class="muted" style="text-align:center;padding:10px">לא הצלחתי לזהות — נסה תמונה חדה יותר, או <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openMealModal()">הוסף ידנית</button></div>`;
+    } finally { if (btn) btn.disabled=false; if (pbtn) pbtn.disabled=false; }
   }
 
   /* ============================================================
