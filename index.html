@@ -1372,8 +1372,10 @@
   }
   function buildPlan(p) {
     const bmr = calcBMR(p.gender, p.startWeight, p.height, p.age);
-    const tdee = Math.round(bmr * p.activity); // informational: estimated total burn at typical activity
-    const base = Math.round(bmr * 1.2);        // sedentary base — eating target before logged movement is added
+    const eb = (p.eatBack==null) ? 0.5 : p.eatBack;
+    const commitKcal = Math.round(Math.max(0, (p.commitSteps||0) - STEP_BASELINE) * p.startWeight * STEP_KCAL * eb);
+    const base = Math.round(bmr * 1.2 + commitKcal); // baseline maintenance = sedentary + committed activity
+    const tdee = base; // displayed as expected total maintenance
     const diff = p.goalWeight - p.startWeight;
     const direction = Math.abs(diff) < 0.5 ? 'maintain' : (diff < 0 ? 'lose' : 'gain');
     const floor = p.gender==='female' ? 1200 : 1500;
@@ -1396,7 +1398,7 @@
                 : p.startWeight;
       proj.push({ week:wk, weight: Math.round(wgt*10)/10 });
     }
-    return { cal, protein, carbs, fat, water, bmr, tdee, direction, pace, weeks, totalKg, goalDateISO: isoDate(gd), proj };
+    return { cal, protein, carbs, fat, water, bmr, tdee, base, commitKcal, direction, pace, weeks, totalKg, goalDateISO: isoDate(gd), proj };
   }
   // Generate several distinct plan options at different paces, with timeframes
   function planOptions(base) {
@@ -1417,7 +1419,11 @@
   // ── Methodology block: shows the formulas applied to the user's actual numbers
   function methodologyHtml(profile, plan) {
     const w = profile.startWeight, h = profile.height, age = profile.age, gender = profile.gender;
-    const bmr = plan.bmr, base = Math.round(bmr*1.2), pace = plan.pace || 0;
+    const bmr = plan.bmr, pace = plan.pace || 0;
+    const sedBase = Math.round(bmr*1.2);
+    const commitSteps = profile.commitSteps || 0;
+    const commitKcal = plan.commitKcal != null ? plan.commitKcal : Math.round(Math.max(0, commitSteps - STEP_BASELINE) * w * STEP_KCAL * 0.5);
+    const base = plan.base != null ? plan.base : (sedBase + commitKcal);
     const dailyDeficit = Math.round(pace*1100);
     const floor = gender==='female' ? 1200 : 1500;
     const refW = plan.direction==='gain' ? profile.goalWeight : profile.startWeight;
@@ -1428,10 +1434,15 @@
         <div class="meth-formula">10×${w} + 6.25×${h} − 5×${age} ${gender==='female'?'− 161':'+ 5'} = <b>${nf(bmr)} קל'</b></div>
         <div class="meth-cite">נוסחת Mifflin-St Jeor — תקן הזהב במחקר התזונה הקליני</div>
       </div>
+      ${commitSteps>0 ? `<div class="meth-section">
+        <div class="meth-label">🚶 התחייבות פעילות יומית</div>
+        <div class="meth-formula">max(0, ${nf(commitSteps)} − ${nf(STEP_BASELINE)}) × ${w} × 0.0005 × 0.5 = <b>${nf(commitKcal)} קל'</b></div>
+        <div class="meth-cite">${nf(commitSteps)} צעדים/יום. ${nf(STEP_BASELINE)} כבר כלולים בבסיס המנוחה; מעבר לכך נספרים בחצי (אומדן שמרני, ספרות מחקר תנועה).</div>
+      </div>` : ''}
       <div class="meth-section">
-        <div class="meth-label">🔋 תחזוקה בסיסית</div>
-        <div class="meth-formula">${nf(bmr)} × 1.2 = <b>${nf(base)} קל'</b></div>
-        <div class="meth-cite">שמירת משקל ביום ללא תנועה. כל צעד ואימון מתווסף לזה.</div>
+        <div class="meth-label">🔋 תחזוקה כוללת (המספר שתשמור בו את המשקל)</div>
+        <div class="meth-formula">${nf(bmr)} × 1.2 ${commitKcal>0 ? `+ ${nf(commitKcal)}` : ''} = <b>${nf(base)} קל'</b></div>
+        <div class="meth-cite">${commitSteps>0 ? 'מנוחה + ההתחייבות שלך לצעדים — האורח חיים האמיתי.' : 'שמירת משקל בסיסית. תנועה מתווספת מעבר לזה.'}</div>
       </div>
       ${pace > 0 ? `<div class="meth-section">
         <div class="meth-label">⚡ גירעון יומי לקצב ${pace} ק"ג/שבוע</div>
@@ -1439,9 +1450,9 @@
         <div class="meth-cite">7,700 קק"ל ≈ אנרגיה של ק"ג שומן — מקובל ומבוסס מחקר</div>
       </div>
       <div class="meth-section">
-        <div class="meth-label">🎯 יעד הקלוריות הבסיסי שלך</div>
+        <div class="meth-label">🎯 יעד הקלוריות היומי שלך</div>
         <div class="meth-formula">${nf(base)} − ${nf(dailyDeficit)} = <b>${nf(plan.cal)} קל' ביום</b></div>
-        <div class="meth-cite">לעולם לא מתחת ל-${nf(floor)} קל' — רצפת בטיחות לתפקוד הורמונלי</div>
+        <div class="meth-cite">לעולם לא מתחת ל-${nf(floor)} קל' — רצפת בטיחות הורמונלית. צעדים מעבר להתחייבות יוסיפו בונוס.</div>
       </div>` : ''}
       <div class="meth-section">
         <div class="meth-label">🥩 חלוקת מאקרו מותאמת לדיאטה</div>
@@ -1479,7 +1490,10 @@
   function workoutBurn(w) { const min = +w.duration||0; if (!min) return 0; return Math.round(metForType(w.type) * curWeight() * (min/60)); }
   function dayWorkoutBurn(date) { return workouts().filter(w=>w.date===date).reduce((s,w)=> s + workoutBurn(w), 0); }
   function eatBackFactor() { const g = getGoals(); return (g.plan && g.plan.eatBack != null) ? g.plan.eatBack : 0.5; }
-  function stepsBurn(date) { const extra = Math.max(0, getSteps(date) - STEP_BASELINE); return Math.round(extra * curWeight() * STEP_KCAL * eatBackFactor()); }
+  function commitStepsOf() { const g = getGoals(); return (g.plan && g.plan.commitSteps) ? +g.plan.commitSteps : 0; }
+  function commitKcalOf() { return Math.round(Math.max(0, commitStepsOf() - STEP_BASELINE) * curWeight() * STEP_KCAL * eatBackFactor()); }
+  // Bonus from steps ABOVE the daily commitment (commitment is already in maintenance)
+  function stepsBurn(date) { const extra = Math.max(0, getSteps(date) - Math.max(commitStepsOf(), STEP_BASELINE)); return Math.round(extra * curWeight() * STEP_KCAL * eatBackFactor()); }
   function genderFloor() { const g = getGoals(); return (g.plan && g.plan.gender==='female') ? 1200 : 1500; }
   function liveBmr() { const g = getGoals(); if (!g.plan) return 0; return calcBMR(g.plan.gender, curWeight(), g.plan.height, g.plan.age); }
   function setEatBack(v) { const g = getGoals(); if (!g.plan) return; g.plan.eatBack = v; saveGoals(g); refreshAll(); openPlanModal(); }
@@ -1487,7 +1501,7 @@
   function dailyBudget(date) {
     const g = getGoals(); if (!g.plan || !g.plan.bmr) return null;
     const calib = g.plan.calib || 1;
-    const maintenance = Math.round(liveBmr() * 1.2 * calib);
+    const maintenance = Math.round(liveBmr() * 1.2 * calib + commitKcalOf());
     const deficit = Math.round((g.plan.direction==='gain' ? -1 : 1) * (g.plan.pace||0) * 1100);
     const core = Math.max(genderFloor(), maintenance - deficit);
     const eSteps = stepsBurn(date), eWork = dayWorkoutBurn(date);
@@ -1546,11 +1560,11 @@
 
   // ── Onboarding wizard ──
   let _ob = {};
-  const OB_STEPS = ['welcome','gender','age','height','weight','activity','goal','plan','summary'];
+  const OB_STEPS = ['welcome','gender','age','height','weight','steps','goal','plan','summary'];
   function openOnboarding(prefill) {
     const g = getGoals();
-    _ob = Object.assign({ step:0, gender:null, age:'', height:'', startWeight:'', activity:null, goalWeight:'', pace:null },
-      g.plan ? { gender:g.plan.gender, age:g.plan.age, height:g.plan.height, startWeight:g.plan.startWeight, activity:g.plan.activity, goalWeight:g.plan.goalWeight, pace:g.plan.pace } : null,
+    _ob = Object.assign({ step:0, gender:null, age:'', height:'', startWeight:'', commitSteps:'', goalWeight:'', pace:null },
+      g.plan ? { gender:g.plan.gender, age:g.plan.age, height:g.plan.height, startWeight:g.plan.startWeight, commitSteps:g.plan.commitSteps, goalWeight:g.plan.goalWeight, pace:g.plan.pace } : null,
       prefill||null);
     openModal('onboard'); obRender();
   }
@@ -1574,13 +1588,18 @@
       body.innerHTML = obWrap('מה הגובה?', '', obNum('height','ס"מ'), back, true);
     } else if (key==='weight') {
       body.innerHTML = obWrap('מה המשקל הנוכחי?', '', obNum('startWeight','ק"ג'), back, true);
-    } else if (key==='activity') {
-      body.innerHTML = obWrap('כמה את/ה פעיל/ה?', 'בחר את הרמה שהכי מתאימה',
-        `<div class="ob-choices">${ACTIVITY.map(a=>obChoice('activity',a.f,'',a.label,a.desc)).join('')}</div>`, back, false);
+    } else if (key==='steps') {
+      const presets = [5000, 8000, 10000, 12500, 15000];
+      const cur = _ob.commitSteps || '';
+      const presetsHtml = presets.map(p => `<button class="btn ${+cur===p?'btn-primary':'btn-ghost'} btn-sm" style="flex:1;min-width:60px" onclick="_ob.commitSteps=${p};obRender()">${nf(p)}</button>`).join('');
+      const inner = `<input id="ob-input" class="ob-num" type="number" inputmode="numeric" value="${cur}" placeholder="10,000" oninput="_ob.commitSteps=this.value" onkeydown="if(event.key==='Enter')obNext()">
+        <div class="muted" style="text-align:center;margin-top:8px">צעדים ביום</div>
+        <div style="display:flex;gap:6px;margin-top:14px;flex-wrap:wrap">${presetsHtml}</div>`;
+      body.innerHTML = obWrap('כמה צעדים תתחייב ביום?', 'זה ייכנס לחישוב התוכנית — ככה היעד שלך משקף את האורח חיים האמיתי שלך', inner, back, true);
     } else if (key==='goal') {
       body.innerHTML = obWrap('מה משקל היעד?', 'כמה היית רוצה לשקול', obNum('goalWeight','ק"ג'), back, true);
     } else if (key==='plan') {
-      const base = { gender:_ob.gender, age:+_ob.age, height:+_ob.height, startWeight:+_ob.startWeight, activity:+_ob.activity, goalWeight:+_ob.goalWeight };
+      const base = { gender:_ob.gender, age:+_ob.age, height:+_ob.height, startWeight:+_ob.startWeight, commitSteps:+_ob.commitSteps, eatBack:0.5, goalWeight:+_ob.goalWeight };
       const diff = base.goalWeight - base.startWeight;
       if (Math.abs(diff) < 0.5) { _ob.pace = 0; _ob.step++; return obRender(); }
       const lose = diff<0;
@@ -1600,12 +1619,12 @@
       }
       body.innerHTML = obWrap(lose?'בחר תוכנית ירידה':'בחר תוכנית עלייה', 'כמה זמן ייקח להגיע ל-'+base.goalWeight+' ק"ג? בחר את הקצב שמתאים לך', inner, back, false);
     } else if (key==='summary') {
-      const plan = buildPlan({ gender:_ob.gender, age:+_ob.age, height:+_ob.height, startWeight:+_ob.startWeight, activity:+_ob.activity, goalWeight:+_ob.goalWeight, pace:+_ob.pace });
+      const plan = buildPlan({ gender:_ob.gender, age:+_ob.age, height:+_ob.height, startWeight:+_ob.startWeight, commitSteps:+_ob.commitSteps, eatBack:0.5, goalWeight:+_ob.goalWeight, pace:+_ob.pace });
       _ob.plan = plan;
       const bi = bmiInfo(+_ob.startWeight, +_ob.height);
       const dirTxt = plan.direction==='lose'?'ירידה':plan.direction==='gain'?'עלייה':'שמירה';
       const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
-      const profile = { gender:_ob.gender, age:+_ob.age, height:+_ob.height, startWeight:+_ob.startWeight, goalWeight:+_ob.goalWeight };
+      const profile = { gender:_ob.gender, age:+_ob.age, height:+_ob.height, startWeight:+_ob.startWeight, commitSteps:+_ob.commitSteps, goalWeight:+_ob.goalWeight };
       body.innerHTML = `<div class="ob-step">
         <div class="ob-emoji">✨</div><div class="ob-title">התוכנית האישית שלך מוכנה</div>
         <div class="ob-sub" style="margin-bottom:14px">📅 המסע מתחיל <b>מחר, ${fullDate(isoDate(tomorrow))}</b></div>
@@ -1639,7 +1658,7 @@
   function obPickPlan(idx) { const o = _ob._opts && _ob._opts[idx]; if (!o) return; _ob.pace = o.pace; setTimeout(obNext, 150); }
   function obNext() {
     const key = OB_STEPS[_ob.step];
-    const map = { age:['age',10,100,'גיל'], height:['height',120,250,'גובה בס"מ'], weight:['startWeight',30,400,'משקל'], goal:['goalWeight',30,400,'משקל יעד'] };
+    const map = { age:['age',10,100,'גיל'], height:['height',120,250,'גובה בס"מ'], weight:['startWeight',30,400,'משקל'], goal:['goalWeight',30,400,'משקל יעד'], steps:['commitSteps',1000,50000,'מספר צעדים יומי'] };
     if (map[key]) { const [f,min,max,lbl] = map[key]; const v = parseFloat(_ob[f]); if (!v) { toast('נא להזין '+lbl); return; } if (v<min||v>max) { toast(lbl+' לא תקין'); return; } }
     if (_ob.step < OB_STEPS.length-1) { _ob.step++; obRender(); }
   }
@@ -1651,7 +1670,7 @@
     const startISO = isoDate(startD);
     g.cal = plan.cal; g.protein = plan.protein; g.carbs = plan.carbs; g.fat = plan.fat; g.water = plan.water;
     g.weight = +_ob.goalWeight; g.onboarded = true;
-    g.plan = { gender:_ob.gender, age:+_ob.age, height:+_ob.height, activity:+_ob.activity,
+    g.plan = { gender:_ob.gender, age:+_ob.age, height:+_ob.height, commitSteps:+_ob.commitSteps,
       startWeight:+_ob.startWeight, startDate:startISO, goalWeight:+_ob.goalWeight,
       pace:plan.pace, direction:plan.direction, tdee:plan.tdee, bmr:plan.bmr, calib:1, eatBack:0.5, goalDate:plan.goalDateISO, createdAt:Date.now() };
     saveGoals(g);
@@ -1665,7 +1684,7 @@
     const pl = g.plan;
     const ms = metrics().slice().sort((a,b)=> a.date<b.date?-1:1);
     const cur = ms.length ? ms[ms.length-1].weight : pl.startWeight;
-    const plan = buildPlan({ gender:pl.gender, age:pl.age, height:pl.height, startWeight:cur, activity:pl.activity, goalWeight:pl.goalWeight, pace:pl.pace });
+    const plan = buildPlan({ gender:pl.gender, age:pl.age, height:pl.height, startWeight:cur, commitSteps:pl.commitSteps, eatBack:pl.eatBack, goalWeight:pl.goalWeight, pace:pl.pace });
     const lose = pl.direction==='lose';
     const todayD = parseD(todayStr()), startD = parseD(pl.startDate);
     if (todayD < startD) {
@@ -1701,7 +1720,7 @@
     const pl = g.plan;
     const ms = metrics().slice().sort((a,b)=> a.date<b.date?-1:1);
     const cur = ms.length ? ms[ms.length-1].weight : pl.startWeight;
-    const plan = buildPlan({ gender:pl.gender, age:pl.age, height:pl.height, startWeight:cur, activity:pl.activity, goalWeight:pl.goalWeight, pace:pl.pace });
+    const plan = buildPlan({ gender:pl.gender, age:pl.age, height:pl.height, startWeight:cur, commitSteps:pl.commitSteps, eatBack:pl.eatBack, goalWeight:pl.goalWeight, pace:pl.pace });
     const bi = bmiInfo(cur, pl.height), biGoal = bmiInfo(pl.goalWeight, pl.height);
     const b = dailyBudget(todayStr()) || { core:g.cal, maintenance:g.cal, deficit:0 };
     const bmrNow = liveBmr() || pl.bmr;
@@ -1719,7 +1738,7 @@
       <div class="ob-result"><div class="ob-sub" style="margin:0 0 4px">יעד קלוריות בסיס ליום</div><div class="ob-bignum">${nf(b.core)}</div>
         <div class="muted" style="text-align:center;margin-top:4px">+ קלוריות על כל צעד ואימון שתתעד</div></div>
 
-      ${methodologyHtml({ gender:pl.gender, age:pl.age, height:pl.height, startWeight:cur, goalWeight:pl.goalWeight }, { bmr:bmrNow, pace:pl.pace, direction:pl.direction, cal:b.core, protein:g.protein, carbs:g.carbs, fat:g.fat })}
+      ${methodologyHtml({ gender:pl.gender, age:pl.age, height:pl.height, startWeight:cur, commitSteps:pl.commitSteps, goalWeight:pl.goalWeight }, { bmr:bmrNow, pace:pl.pace, direction:pl.direction, cal:b.core, base:b.maintenance, commitKcal:commitKcalOf(), protein:g.protein, carbs:g.carbs, fat:g.fat })}
       ${pl.calib && pl.calib!==1 ? `<div class="muted" style="line-height:1.7;margin-bottom:12px;text-align:center">🔧 כיול אישי: ${calibPct>0?'+':''}${calibPct}% — חילוף החומרים האמיתי שלך, נלמד מהתוצאות.</div>` : ''}
 
       ${plan.direction!=='maintain' ? `<div class="card-title" style="margin-bottom:8px">תחזית משקל ${pl.direction==='lose'?'📉':'📈'}</div>
@@ -1753,7 +1772,7 @@
     const g = getGoals(); if (!g.plan) { openOnboarding(); return; }
     const ms = metrics().slice().sort((a,b)=> a.date<b.date?-1:1);
     const cur = ms.length ? ms[ms.length-1].weight : g.plan.startWeight;
-    const plan = buildPlan({ gender:g.plan.gender, age:g.plan.age, height:g.plan.height, startWeight:cur, activity:g.plan.activity, goalWeight:g.plan.goalWeight, pace:g.plan.pace });
+    const plan = buildPlan({ gender:g.plan.gender, age:g.plan.age, height:g.plan.height, startWeight:cur, commitSteps:g.plan.commitSteps, eatBack:g.plan.eatBack, goalWeight:g.plan.goalWeight, pace:g.plan.pace });
     g.cal = plan.cal; g.protein = plan.protein; g.carbs = plan.carbs; g.fat = plan.fat;
     g.plan.tdee = plan.tdee; g.plan.bmr = plan.bmr; g.plan.direction = plan.direction; g.plan.pace = plan.pace;
     g.plan.goalDate = plan.goalDateISO; g.plan.startWeight = cur; g.plan.startDate = todayStr();
