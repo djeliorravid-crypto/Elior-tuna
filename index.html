@@ -1847,15 +1847,28 @@
   function dismissInstallBanner() { localStorage.setItem('install_dismissed','yes'); el('install-banner').style.display='none'; }
   window.addEventListener('load', () => { if (window.innerWidth<=768) setTimeout(maybeShowInstallBanner, 3000); });
 
-  (function checkVersion() {
-    const params = new URLSearchParams(location.search);
-    if (params.get('_v')) { localStorage.setItem('app_version', params.get('_v')); history.replaceState(null,'',location.pathname); return; }
-    fetch('version.txt?t=' + Date.now()).then(r=>r.text()).then(sv => {
+  let _lastVerCheck = 0;
+  function checkVersionNow() {
+    if (Date.now() - _lastVerCheck < 8000) return;
+    _lastVerCheck = Date.now();
+    fetch('version.txt?t=' + Date.now(), { cache:'no-store' }).then(r=>r.text()).then(sv => {
       const v = sv.trim(), local = localStorage.getItem('app_version');
-      if (local && local!==v) location.replace(location.pathname + '?_v=' + v);
+      if (local && local !== v) location.replace(location.pathname + '?_v=' + v);
       else localStorage.setItem('app_version', v);
     }).catch(()=>{});
+  }
+  (function bootVersionCheck() {
+    const params = new URLSearchParams(location.search);
+    if (params.get('_v')) {
+      localStorage.setItem('app_version', params.get('_v'));
+      history.replaceState(null, '', location.pathname);
+      return;
+    }
+    checkVersionNow();
   })();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkVersionNow(); });
+  window.addEventListener('focus', checkVersionNow);
+  window.addEventListener('pageshow', checkVersionNow);
 
   /* ============================================================
      BOOT
